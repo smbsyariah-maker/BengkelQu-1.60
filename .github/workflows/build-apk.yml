@@ -24,26 +24,24 @@ jobs:
         run: |
           if [ ! -f .env ]; then
             if [ -f .env.example ]; then
-              echo "[INFO] File .env belum tersedia. Menyalin dari .env.example..."
+              echo "[INFO] File .env tidak ditemukan. Menyalin dari .env.example..."
               cp .env.example .env
-              echo "[SUCCESS] Berhasil membuat file .env dari .env.example."
+              echo "[SUCCESS] File .env berhasil dibuat dari .env.example."
             else
               echo "[WARN] File .env.example tidak ditemukan. Membuat file .env kosong..."
               touch .env
             fi
           else
-            echo "[INFO] File .env sudah ada, melanjutkan langkah berikutnya."
+            echo "[INFO] File .env sudah ada."
           fi
 
-      # 3. Setup Node.js untuk build frontend Vite React
+      # 3. Setup Node.js (tanpa cache lockfile agar tidak gagal jika lockfile belum di-push)
       - name: 3. Set Up Node.js 20
         uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache: 'npm'
-        continue-on-error: true
 
-      # 4. Setup Java JDK 17
+      # 4. Setup Java JDK 17 (Temurin)
       - name: 4. Set Up Java JDK 17
         uses: actions/setup-java@v4
         with:
@@ -65,32 +63,44 @@ jobs:
             echo "[INFO] debug.keystore sudah ditemukan di ~/.android/debug.keystore"
           fi
 
-      # 6. Setup Android SDK
-      - name: 6. Set Up Android SDK
-        uses: android-actions/setup-android@v3
+      # 6. Konfigurasi Android SDK bawaan GitHub Runner & Terima Lisensi
+      - name: 6. Konfigurasi Android SDK bawaan Runner & Lisensi
+        run: |
+          export ANDROID_HOME=/usr/local/lib/android/sdk
+          export ANDROID_SDK_ROOT=/usr/local/lib/android/sdk
+          echo "ANDROID_HOME=/usr/local/lib/android/sdk" >> $GITHUB_ENV
+          echo "ANDROID_SDK_ROOT=/usr/local/lib/android/sdk" >> $GITHUB_ENV
+          
+          # Menerima lisensi Android SDK bawaan GitHub Runner
+          if [ -d "$ANDROID_HOME/cmdline-tools/latest/bin" ]; then
+            yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses || true
+          fi
+          echo "[SUCCESS] Android SDK siap digunakan."
 
-      # 7. Install dependencies npm dan build web app
+      # 7. Install dependencies web dengan legacy-peer-deps dan build Vite
       - name: 7. Install Dependencies dan Build Web App
         run: |
-          npm install
+          npm install --legacy-peer-deps
           npm run build
 
-      # 8. Konfigurasi platform Android via Capacitor
-      - name: 8. Setup Platform Android
+      # 8. Setup platform native Android via Capacitor
+      - name: 8. Setup Platform Android via Capacitor
         run: |
-          npm install --no-save @capacitor/core@latest @capacitor/cli@latest @capacitor/android@latest
+          npm install --no-save --legacy-peer-deps @capacitor/core@latest @capacitor/cli@latest @capacitor/android@latest
           
+          # Inisialisasi folder android jika belum ada
           if [ ! -d "android" ]; then
-            echo "[INFO] Menginisialisasi platform Android..."
+            echo "[INFO] Menginisialisasi proyek Android native..."
             npx cap add android
           fi
           
-          echo "[INFO] Sinkronisasi aset web ke platform Android..."
+          # Sinkronisasikan hasil build dist/ ke platform Android
+          echo "[INFO] Sinkronisasi web assets ke Android..."
           npx cap sync android
           
-          # Salin debug.keystore ke folder android/app jika dibutuhkan
-          if [ -d "android/app" ] && [ ! -f "android/app/debug.keystore" ]; then
-            cp ~/.android/debug.keystore android/app/debug.keystore
+          # Salin debug.keystore ke folder android/app
+          if [ -d "android/app" ]; then
+            cp ~/.android/debug.keystore android/app/debug.keystore || true
             echo "[SUCCESS] debug.keystore disalin ke android/app/debug.keystore"
           fi
 
@@ -104,14 +114,14 @@ jobs:
             chmod +x ./gradlew
             echo "[SUCCESS] Hak akses chmod +x berhasil diberikan ke ./gradlew"
           else
-            echo "[WARN] File gradlew belum ditemukan di root maupun folder android."
+            echo "[WARN] File gradlew tidak ditemukan."
           fi
 
-      # 10. Build Android APK (Debug) menggunakan Gradle
+      # 10. Build Android APK Debug menggunakan Gradle
       - name: 10. Build Android APK Debug dengan Gradle
         run: |
           cd android
-          ./gradlew assembleDebug --stacktrace
+          ./gradlew assembleDebug --no-daemon --stacktrace
           cd ..
 
       # 11. Organisasi file output APK
@@ -120,10 +130,10 @@ jobs:
           mkdir -p build-artifacts
           if [ -f "android/app/build/outputs/apk/debug/app-debug.apk" ]; then
             cp android/app/build/outputs/apk/debug/app-debug.apk build-artifacts/BengkelQu-1.60-debug.apk
-            echo "[SUCCESS] Berkas APK siap di build-artifacts/BengkelQu-1.60-debug.apk"
+            echo "[SUCCESS] File APK siap: build-artifacts/BengkelQu-1.60-debug.apk"
           fi
 
-      # 12. Upload hasil APK menggunakan actions/upload-artifact@v4
+      # 12. Upload hasil file APK menggunakan actions/upload-artifact@v4
       - name: 12. Upload Hasil File APK (actions/upload-artifact@v4)
         uses: actions/upload-artifact@v4
         with:
@@ -133,16 +143,3 @@ jobs:
             android/app/build/outputs/apk/debug/*.apk
           retention-days: 30
           if-no-files-found: error
-
-      # 13. Rilis Otomatis jika push tag versi (Opsional)
-      - name: 13. Publikasikan ke GitHub Release (Jika Tag v*)
-        if: startsWith(github.ref, 'refs/tags/v')
-        uses: softprops/action-gh-release@v2
-        with:
-          files: build-artifacts/*.apk
-          name: Bengkel Qu ${{ github.ref_name }} APK
-          draft: false
-          prerelease: false
-          generate_release_notes: true
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

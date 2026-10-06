@@ -1,0 +1,117 @@
+name: Build Android APK (Bengkel Qu 1.60)
+
+on:
+  push:
+    branches: [main, master]
+    tags:
+      - 'v*'
+  pull_request:
+    branches: [main, master]
+  workflow_dispatch:
+    inputs:
+      build_type:
+        description: 'Tipe Build APK'
+        required: true
+        default: 'debug'
+        type: choice
+        options:
+          - debug
+          - release
+
+jobs:
+  build-apk:
+    name: Build Bengkel Qu Android APK
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 1. Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: 2. Set Up Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+        continue-on-error: true
+
+      - name: 3. Set Up Java JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: 17
+
+      - name: 4. Set Up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: 5. Install Dependencies Proyek Web
+        run: |
+          npm install
+
+      - name: 6. Build Web App (Vite React)
+        run: |
+          npm run build
+
+      - name: 7. Pasang Capacitor & Setup Platform Android
+        run: |
+          npm install --no-save @capacitor/core@latest @capacitor/cli@latest @capacitor/android@latest
+          
+          # Cek apakah folder android sudah ada, jika belum buat platform android baru
+          if [ ! -d "android" ]; then
+            echo "Membuat platform Android via Capacitor..."
+            npx cap add android
+          fi
+          
+          # Sinkronisasikan file web dist/ ke proyek Android
+          npx cap sync android
+
+      - name: 8. Konfigurasi Izin Eksekusi Gradle
+        run: |
+          chmod +x android/gradlew
+
+      - name: 9. Build Android APK Debug
+        run: |
+          cd android
+          ./gradlew assembleDebug --stacktrace
+          cd ..
+
+      - name: 10. (Opsional) Build Android APK Release Unsigned
+        if: "${{ github.event.inputs.build_type == 'release' }}"
+        run: |
+          cd android
+          ./gradlew assembleRelease --stacktrace
+          cd ..
+
+      - name: 11. Rapikan Berkas APK Output
+        run: |
+          mkdir -p build-artifacts
+          
+          # Salin file APK debug
+          if [ -f "android/app/build/outputs/apk/debug/app-debug.apk" ]; then
+            cp android/app/build/outputs/apk/debug/app-debug.apk build-artifacts/BengkelQu-1.60-debug.apk
+            echo "Berhasil menyiapkan BengkelQu-1.60-debug.apk"
+          fi
+          
+          # Salin file APK release (jika ada)
+          if [ -f "android/app/build/outputs/apk/release/app-release-unsigned.apk" ]; then
+            cp android/app/build/outputs/apk/release/app-release-unsigned.apk build-artifacts/BengkelQu-1.60-release-unsigned.apk
+            echo "Berhasil menyiapkan BengkelQu-1.60-release-unsigned.apk"
+          fi
+
+      - name: 12. Upload Berkas APK ke GitHub Artifacts (Dapat Diunduh Langsung)
+        uses: actions/upload-artifact@v4
+        with:
+          name: BengkelQu-1.60-APK
+          path: build-artifacts/*.apk
+          retention-days: 30
+
+      - name: 13. Rilis Otomatis di GitHub Release (Jika Push Tag v*)
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: build-artifacts/*.apk
+          name: Bengkel Qu ${{ github.ref_name }} APK
+          draft: false
+          prerelease: false
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -1,4 +1,4 @@
-name: Build Android APK (Bengkel Qu 1.60)
+name: Build Android APK (Debug)
 
 on:
   push:
@@ -8,103 +8,134 @@ on:
   pull_request:
     branches: [main, master]
   workflow_dispatch:
-    inputs:
-      build_type:
-        description: 'Tipe Build APK'
-        required: true
-        default: 'debug'
-        type: choice
-        options:
-          - debug
-          - release
 
 jobs:
   build-apk:
-    name: Build Bengkel Qu Android APK
+    name: Build Android APK (Debug) dengan Gradle & Java 17
     runs-on: ubuntu-latest
 
     steps:
+      # 1. Checkout kode repositori
       - name: 1. Checkout Repository
         uses: actions/checkout@v4
 
-      - name: 2. Set Up Node.js 20
+      # 2. Pengecekan file .env (menyalin dari .env.example jika belum tersedia)
+      - name: 2. Pengecekan File .env (Copy dari .env.example jika belum tersedia)
+        run: |
+          if [ ! -f .env ]; then
+            if [ -f .env.example ]; then
+              echo "[INFO] File .env belum tersedia. Menyalin dari .env.example..."
+              cp .env.example .env
+              echo "[SUCCESS] Berhasil membuat file .env dari .env.example."
+            else
+              echo "[WARN] File .env.example tidak ditemukan. Membuat file .env kosong..."
+              touch .env
+            fi
+          else
+            echo "[INFO] File .env sudah ada, melanjutkan langkah berikutnya."
+          fi
+
+      # 3. Setup Node.js untuk build frontend Vite React
+      - name: 3. Set Up Node.js 20
         uses: actions/setup-node@v4
         with:
           node-version: 20
           cache: 'npm'
         continue-on-error: true
 
-      - name: 3. Set Up Java JDK 17
+      # 4. Setup Java JDK 17
+      - name: 4. Set Up Java JDK 17
         uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
-          java-version: 17
+          java-version: '17'
 
-      - name: 4. Set Up Android SDK
+      # 5. Otomatis membuat atau mendeteksi file debug.keystore
+      - name: 5. Otomatis Deteksi atau Buat debug.keystore
+        run: |
+          mkdir -p ~/.android
+          if [ ! -f ~/.android/debug.keystore ]; then
+            echo "[INFO] debug.keystore belum ada. Membuat debug.keystore baru..."
+            keytool -genkey -v -keystore ~/.android/debug.keystore \
+              -storepass android -alias androiddebugkey -keypass android \
+              -keyalg RSA -keysize 2048 -validity 10000 \
+              -dname "CN=Android Debug,O=Android,C=US"
+            echo "[SUCCESS] debug.keystore berhasil dibuat di ~/.android/debug.keystore"
+          else
+            echo "[INFO] debug.keystore sudah ditemukan di ~/.android/debug.keystore"
+          fi
+
+      # 6. Setup Android SDK
+      - name: 6. Set Up Android SDK
         uses: android-actions/setup-android@v3
 
-      - name: 5. Install Dependencies Proyek Web
+      # 7. Install dependencies npm dan build web app
+      - name: 7. Install Dependencies dan Build Web App
         run: |
           npm install
-
-      - name: 6. Build Web App (Vite React)
-        run: |
           npm run build
 
-      - name: 7. Pasang Capacitor & Setup Platform Android
+      # 8. Konfigurasi platform Android via Capacitor
+      - name: 8. Setup Platform Android
         run: |
           npm install --no-save @capacitor/core@latest @capacitor/cli@latest @capacitor/android@latest
           
-          # Cek apakah folder android sudah ada, jika belum buat platform android baru
           if [ ! -d "android" ]; then
-            echo "Membuat platform Android via Capacitor..."
+            echo "[INFO] Menginisialisasi platform Android..."
             npx cap add android
           fi
           
-          # Sinkronisasikan file web dist/ ke proyek Android
+          echo "[INFO] Sinkronisasi aset web ke platform Android..."
           npx cap sync android
+          
+          # Salin debug.keystore ke folder android/app jika dibutuhkan
+          if [ -d "android/app" ] && [ ! -f "android/app/debug.keystore" ]; then
+            cp ~/.android/debug.keystore android/app/debug.keystore
+            echo "[SUCCESS] debug.keystore disalin ke android/app/debug.keystore"
+          fi
 
-      - name: 8. Konfigurasi Izin Eksekusi Gradle
+      # 9. Menyiapkan hak akses chmod +x untuk gradlew
+      - name: 9. Menyiapkan Hak Akses chmod +x untuk gradlew
         run: |
-          chmod +x android/gradlew
+          if [ -f "android/gradlew" ]; then
+            chmod +x android/gradlew
+            echo "[SUCCESS] Hak akses chmod +x berhasil diberikan ke android/gradlew"
+          elif [ -f "./gradlew" ]; then
+            chmod +x ./gradlew
+            echo "[SUCCESS] Hak akses chmod +x berhasil diberikan ke ./gradlew"
+          else
+            echo "[WARN] File gradlew belum ditemukan di root maupun folder android."
+          fi
 
-      - name: 9. Build Android APK Debug
+      # 10. Build Android APK (Debug) menggunakan Gradle
+      - name: 10. Build Android APK Debug dengan Gradle
         run: |
           cd android
           ./gradlew assembleDebug --stacktrace
           cd ..
 
-      - name: 10. (Opsional) Build Android APK Release Unsigned
-        if: "${{ github.event.inputs.build_type == 'release' }}"
-        run: |
-          cd android
-          ./gradlew assembleRelease --stacktrace
-          cd ..
-
-      - name: 11. Rapikan Berkas APK Output
+      # 11. Organisasi file output APK
+      - name: 11. Siapkan Berkas APK Output
         run: |
           mkdir -p build-artifacts
-          
-          # Salin file APK debug
           if [ -f "android/app/build/outputs/apk/debug/app-debug.apk" ]; then
             cp android/app/build/outputs/apk/debug/app-debug.apk build-artifacts/BengkelQu-1.60-debug.apk
-            echo "Berhasil menyiapkan BengkelQu-1.60-debug.apk"
-          fi
-          
-          # Salin file APK release (jika ada)
-          if [ -f "android/app/build/outputs/apk/release/app-release-unsigned.apk" ]; then
-            cp android/app/build/outputs/apk/release/app-release-unsigned.apk build-artifacts/BengkelQu-1.60-release-unsigned.apk
-            echo "Berhasil menyiapkan BengkelQu-1.60-release-unsigned.apk"
+            echo "[SUCCESS] Berkas APK siap di build-artifacts/BengkelQu-1.60-debug.apk"
           fi
 
-      - name: 12. Upload Berkas APK ke GitHub Artifacts (Dapat Diunduh Langsung)
+      # 12. Upload hasil APK menggunakan actions/upload-artifact@v4
+      - name: 12. Upload Hasil File APK (actions/upload-artifact@v4)
         uses: actions/upload-artifact@v4
         with:
-          name: BengkelQu-1.60-APK
-          path: build-artifacts/*.apk
+          name: BengkelQu-1.60-Android-APK-Debug
+          path: |
+            build-artifacts/*.apk
+            android/app/build/outputs/apk/debug/*.apk
           retention-days: 30
+          if-no-files-found: error
 
-      - name: 13. Rilis Otomatis di GitHub Release (Jika Push Tag v*)
+      # 13. Rilis Otomatis jika push tag versi (Opsional)
+      - name: 13. Publikasikan ke GitHub Release (Jika Tag v*)
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:

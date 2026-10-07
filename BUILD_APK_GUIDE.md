@@ -7,8 +7,8 @@ File konfigurasi workflow GitHub Actions telah dibuat di:
 
 ## 🛠️ Fitur-Fitur Utama yang Disematkan
 
-1. **Java JDK 17 & Gradle**:
-   - Menyiapkan environment **Java 17 (Temurin)** dan **Android SDK** terkini untuk mengompilasi APK debug via Gradle (`./gradlew assembleDebug`).
+1. **Node.js 22 & Java JDK 17 & Gradle**:
+   - Menyiapkan environment **Node.js 22** (sesuai persyaratan `@capacitor/cli` v7+) dan **Java 17 (Temurin)** serta Android SDK bawaan GitHub Runner untuk mengompilasi APK debug via Gradle (`./gradlew assembleDebug`).
 2. **Pengecekan File `.env` Otomatis**:
    - Skrip memeriksa ketersediaan file `.env`. Jika belum ada, skrip akan otomatis menyalin dari `.env.example` agar build web tidak gagal karena variabel hilang.
 3. **Otomatis Deteksi & Buat `debug.keystore`**:

@@ -13,6 +13,8 @@ jobs:
   build-apk:
     name: Build Android APK (Debug) dengan Gradle & Java 17
     runs-on: ubuntu-latest
+    env:
+      NODE_VERSION: '22'
 
     steps:
       # 1. Checkout kode repositori
@@ -35,11 +37,17 @@ jobs:
             echo "[INFO] File .env sudah ada."
           fi
 
-      # 3. Setup Node.js (tanpa cache lockfile agar tidak gagal jika lockfile belum di-push)
-      - name: 3. Set Up Node.js 20
+      # 3. Setup Node.js 22 (Capacitor CLI v7+ memerlukan Node.js minimal v22.0.0)
+      - name: 3. Set Up Node.js 22
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: ${{ env.NODE_VERSION }}
+          check-latest: true
+
+      - name: Verifikasi Versi Node.js & npm
+        run: |
+          echo "[INFO] Versi Node.js: $(node -v)"
+          echo "[INFO] Versi npm: $(npm -v)"
 
       # 4. Setup Java JDK 17 (Temurin)
       - name: 4. Set Up Java JDK 17
@@ -47,6 +55,10 @@ jobs:
         with:
           distribution: 'temurin'
           java-version: '17'
+
+      - name: Verifikasi Versi Java
+        run: |
+          java -version
 
       # 5. Otomatis membuat atau mendeteksi file debug.keystore
       - name: 5. Otomatis Deteksi atau Buat debug.keystore
@@ -66,14 +78,18 @@ jobs:
       # 6. Konfigurasi Android SDK bawaan GitHub Runner & Terima Lisensi
       - name: 6. Konfigurasi Android SDK bawaan Runner & Lisensi
         run: |
-          export ANDROID_HOME=/usr/local/lib/android/sdk
-          export ANDROID_SDK_ROOT=/usr/local/lib/android/sdk
-          echo "ANDROID_HOME=/usr/local/lib/android/sdk" >> $GITHUB_ENV
-          echo "ANDROID_SDK_ROOT=/usr/local/lib/android/sdk" >> $GITHUB_ENV
+          if [ -z "$ANDROID_HOME" ]; then
+            export ANDROID_HOME=/usr/local/lib/android/sdk
+          fi
+          export ANDROID_SDK_ROOT=$ANDROID_HOME
+          echo "ANDROID_HOME=$ANDROID_HOME" >> $GITHUB_ENV
+          echo "ANDROID_SDK_ROOT=$ANDROID_HOME" >> $GITHUB_ENV
           
           # Menerima lisensi Android SDK bawaan GitHub Runner
           if [ -d "$ANDROID_HOME/cmdline-tools/latest/bin" ]; then
-            yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses || true
+            yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses || true
+          elif command -v sdkmanager &> /dev/null; then
+            yes | sdkmanager --licenses || true
           fi
           echo "[SUCCESS] Android SDK siap digunakan."
 
@@ -86,11 +102,12 @@ jobs:
       # 8. Setup platform native Android via Capacitor
       - name: 8. Setup Platform Android via Capacitor
         run: |
-          npm install --no-save --legacy-peer-deps @capacitor/core@latest @capacitor/cli@latest @capacitor/android@latest
+          # Install dependencies Capacitor dengan kompatibilitas Node 22
+          npm install --legacy-peer-deps @capacitor/core@latest @capacitor/cli@latest @capacitor/android@latest
           
           # Inisialisasi folder android jika belum ada
           if [ ! -d "android" ]; then
-            echo "[INFO] Menginisialisasi proyek Android native..."
+            echo "[INFO] Menginisialisasi proyek Android native dengan Capacitor..."
             npx cap add android
           fi
           
@@ -121,16 +138,25 @@ jobs:
       - name: 10. Build Android APK Debug dengan Gradle
         run: |
           cd android
-          ./gradlew assembleDebug --no-daemon --stacktrace
+          ./gradlew assembleDebug --no-daemon --stacktrace -Dorg.gradle.jvmargs="-Xmx2048m -XX:MaxMetaspaceSize=512m"
           cd ..
 
       # 11. Organisasi file output APK
       - name: 11. Siapkan Berkas APK Output
         run: |
           mkdir -p build-artifacts
-          if [ -f "android/app/build/outputs/apk/debug/app-debug.apk" ]; then
+          FOUND_APK=$(find android/app/build/outputs/apk -name "*.apk" -type f | head -n 1)
+          if [ -n "$FOUND_APK" ]; then
+            echo "[INFO] Menemukan file APK di: $FOUND_APK"
+            cp "$FOUND_APK" build-artifacts/BengkelQu-1.60-debug.apk
+            echo "[SUCCESS] File APK berhasil disiapkan di build-artifacts/BengkelQu-1.60-debug.apk"
+          elif [ -f "android/app/build/outputs/apk/debug/app-debug.apk" ]; then
             cp android/app/build/outputs/apk/debug/app-debug.apk build-artifacts/BengkelQu-1.60-debug.apk
             echo "[SUCCESS] File APK siap: build-artifacts/BengkelQu-1.60-debug.apk"
+          else
+            echo "[ERROR] File APK tidak ditemukan di direktori output Gradle!"
+            find android -name "*.apk" || true
+            exit 1
           fi
 
       # 12. Upload hasil file APK menggunakan actions/upload-artifact@v4
@@ -140,6 +166,6 @@ jobs:
           name: BengkelQu-1.60-Android-APK-Debug
           path: |
             build-artifacts/*.apk
-            android/app/build/outputs/apk/debug/*.apk
+            android/app/build/outputs/apk/**/*.apk
           retention-days: 30
           if-no-files-found: error

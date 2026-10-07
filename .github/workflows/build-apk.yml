@@ -1,212 +1,155 @@
-name: Build Android APK (Debug)
+name: Build Android APK (Bengkel Qu 1.60)
 
 on:
   push:
-    branches: [main, master]
-    tags:
-      - 'v*'
+    branches: [ "**" ]
   pull_request:
-    branches: [main, master]
+    branches: [ "**" ]
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
-  build-apk:
-    name: Build Android APK (Debug) - Node 22, JDK 21 & Android 35
+  build:
+    name: Build & Package Android APK
     runs-on: ubuntu-latest
     timeout-minutes: 25
     env:
       NODE_VERSION: '22'
       CI: 'true'
       CAPACITOR_TELEMETRY: 'false'
-      GRADLE_OPTS: "-Dorg.gradle.jvmargs='-Xmx2048m -XX:MaxMetaspaceSize=512m -XX:+HeapDumpOnOutOfMemoryError' -Dorg.gradle.daemon=false"
 
     steps:
-      # 1. Checkout Repository
       - name: 1. Checkout Repository
         uses: actions/checkout@v4
 
-      # 2. Menyiapkan .env secara aman
-      - name: 2. Pengecekan & Persiapan File .env
-        run: |
-          if [ ! -f .env ]; then
-            if [ -f .env.example ]; then
-              echo "[INFO] File .env tidak ditemukan. Menyalin dari .env.example..."
-              cp .env.example .env
-              echo "[SUCCESS] File .env berhasil dibuat dari .env.example."
-            else
-              echo "[WARN] File .env.example tidak ditemukan. Membuat file .env kosong..."
-              touch .env
-            fi
-          else
-            echo "[INFO] File .env sudah ada."
-          fi
-
-      # 3. Setup Node.js v22
-      - name: 3. Setup Node.js v22
+      - name: 2. Setup Node.js (v22 LTS)
         uses: actions/setup-node@v4
         with:
-          node-version: ${{ env.NODE_VERSION }}
+          node-version: 22
           check-latest: true
 
-      - name: Verifikasi Versi Node.js & npm
-        run: |
-          echo "[INFO] Node.js version: $(node -v)"
-          echo "[INFO] npm version: $(npm -v)"
-
-      # 4. Setup Java JDK 21 (Temurin)
-      - name: 4. Setup Java JDK 21 (Temurin)
+      - name: 3. Set up JDK 21 (Temurin)
         uses: actions/setup-java@v4
         with:
-          distribution: 'temurin'
           java-version: '21'
+          distribution: 'temurin'
 
-      - name: Verifikasi Versi Java
-        run: |
-          java -version
-
-      # 5. Setup Android SDK (platforms android-35 & build-tools 35.0.0) via android-actions/setup-android@v4
-      - name: 5. Setup Android SDK & Tools
+      - name: 4. Setup Android SDK Tools & Licenses
         uses: android-actions/setup-android@v4
         with:
           packages: 'platforms;android-35 build-tools;35.0.0'
 
-      # 6. Otomatisasi Pembuatan debug.keystore Secara Aman
-      - name: 6. Otomatisasi Pembuatan debug.keystore
+      - name: 5. Prepare environment and debug keystore
         run: |
+          # Siapkan .env
+          if [ ! -f .env ]; then
+            cp .env.example .env 2>/dev/null || touch .env
+          fi
+
+          # Buat debug keystore jika belum ada
           mkdir -p ~/.android
-          if [ ! -f ~/.android/debug.keystore ]; then
-            echo "[INFO] debug.keystore belum ada. Membuat keystore baru..."
-            keytool -genkeypair -v -keystore ~/.android/debug.keystore \
-              -storepass android -alias androiddebugkey -keypass android \
-              -keyalg RSA -keysize 2048 -validity 10000 \
-              -dname "CN=Android Debug,O=Android,C=US"
-            echo "[SUCCESS] debug.keystore berhasil dibuat di ~/.android/debug.keystore"
-          else
-            echo "[INFO] debug.keystore sudah ditemukan."
+          if [ -f debug.keystore.base64 ]; then
+            base64 -d debug.keystore.base64 > debug.keystore
+            cp debug.keystore ~/.android/debug.keystore 2>/dev/null || true
+          elif [ ! -f ~/.android/debug.keystore ]; then
+            keytool -genkeypair -v -keystore ~/.android/debug.keystore -storepass android -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Android Debug,O=Android,C=US"
           fi
 
-      # 7. Install Dependencies Web & Build Vite
-      - name: 7. Install Dependencies Web & Build Vite
+      - name: 6. Install Dependencies & Build Web App
         run: |
-          echo "[INFO] Menginstal dependensi npm..."
           npm install --legacy-peer-deps
-          echo "[INFO] Menjalankan build Vite..."
           npm run build
-          if [ -d "dist" ]; then
-            echo "[SUCCESS] Build web Vite berhasil (folder dist tersedia)."
-          else
-            echo "[ERROR] Folder dist tidak ditemukan setelah build!"
-            exit 1
-          fi
 
-      # 8. Setup Capacitor Android & Penyuntikan variables.gradle & gradle.properties
-      - name: 8. Setup Capacitor Android & Konfigurasi Build
+      - name: 7. Inisialisasi & Sinkronisasi Platform Android
         run: |
-          echo "[INFO] Menyiapkan paket Capacitor..."
+          # Pastikan paket Capacitor terpasang
           npm install --legacy-peer-deps @capacitor/core@latest @capacitor/cli@latest @capacitor/android@latest
 
-          # Inisialisasi folder android jika belum ada
-          if [ ! -d "android" ]; then
-            echo "[INFO] Folder android belum ada. Menginisialisasi Capacitor Android..."
+          # Inisialisasi platform android jika gradlew belum ada
+          if [ ! -f "android/gradlew" ]; then
+            echo "[INFO] Membuat platform android native via Capacitor..."
+            rm -rf android
             npx cap add android
           fi
 
-          # Sinkronisasi web assets ke Android
-          echo "[INFO] Sinkronisasi web assets ke Capacitor Android..."
+          echo "[INFO] Menyinkronkan aset web ke Android..."
           npx cap sync android
 
-          # Salin debug.keystore ke folder android/app jika ada
+          # Salin debug keystore ke folder android/app jika ada
           if [ -d "android/app" ]; then
-            cp ~/.android/debug.keystore android/app/debug.keystore || true
+            cp ~/.android/debug.keystore android/app/debug.keystore 2>/dev/null || true
           fi
 
-          # Penyuntikan konfigurasi target SDK 35 pada variables.gradle
-          echo "[INFO] Menyuntikkan konfigurasi SDK 35 ke android/variables.gradle..."
+          # Konfigurasi variables.gradle ke SDK 35 yang kompatibel
           {
             echo "ext {"
-            echo "    minSdkVersion = 22"
+            echo "    minSdkVersion = 24"
             echo "    compileSdkVersion = 35"
             echo "    targetSdkVersion = 35"
-            echo "    androidxActivityVersion = '1.9.2'"
+            echo "    androidxActivityVersion = '1.9.3'"
             echo "    androidxAppCompatVersion = '1.7.0'"
             echo "    androidxCoordinatorLayoutVersion = '1.2.0'"
-            echo "    androidxCoreVersion = '1.13.1'"
-            echo "    androidxFragmentVersion = '1.8.3'"
+            echo "    androidxCoreVersion = '1.15.0'"
+            echo "    androidxFragmentVersion = '1.8.5'"
+            echo "    coreSplashScreenVersion = '1.0.1'"
+            echo "    androidxWebkitVersion = '1.12.1'"
             echo "    junitVersion = '4.13.2'"
             echo "    androidxJunitVersion = '1.2.1'"
             echo "    androidxEspressoCoreVersion = '3.6.1'"
-            echo "    cordovaAndroidVersion = '10.1.1'"
+            echo "    cordovaAndroidVersion = '14.0.1'"
             echo "}"
           } > android/variables.gradle
-          echo "[INFO] Isi android/variables.gradle:"
-          cat android/variables.gradle
 
-          # Penyuntikan optimasi memori dan konfigurasi pada android/gradle.properties
-          echo "[INFO] Mengonfigurasi android/gradle.properties..."
-          if [ ! -f "android/gradle.properties" ]; then
-            touch android/gradle.properties
-          fi
-          sed -i '/org.gradle.jvmargs/d' android/gradle.properties 2>/dev/null || true
-          sed -i '/org.gradle.parallel/d' android/gradle.properties 2>/dev/null || true
-          echo "org.gradle.jvmargs=-Xmx2048m -XX:MaxMetaspaceSize=512m -Dfile.encoding=UTF-8" >> android/gradle.properties
-          echo "org.gradle.parallel=false" >> android/gradle.properties
-          echo "android.useAndroidX=true" >> android/gradle.properties
-          echo "android.enableJetifier=true" >> android/gradle.properties
+          # Konfigurasi gradle.properties optimal untuk CI
+          {
+            echo "org.gradle.jvmargs=-Xmx2048m -XX:MaxMetaspaceSize=512m -Dfile.encoding=UTF-8"
+            echo "org.gradle.daemon=false"
+            echo "org.gradle.parallel=false"
+            echo "android.useAndroidX=true"
+            echo "android.enableJetifier=true"
+            echo "android.builder.sdkDownload=true"
+          } > android/gradle.properties
 
           # Pastikan local.properties mengenali ANDROID_HOME
           if [ -n "$ANDROID_HOME" ]; then
             echo "sdk.dir=$ANDROID_HOME" > android/local.properties
           fi
 
-          # Menyiapkan hak akses executable untuk gradlew
-          if [ -f "android/gradlew" ]; then
-            chmod +x android/gradlew
-            echo "[SUCCESS] Izin chmod +x diberikan ke android/gradlew."
-          fi
+          # Beri izin eksekusi gradlew di root dan di folder android
+          chmod +x android/gradlew 2>/dev/null || true
+          chmod +x gradlew 2>/dev/null || true
 
-          # Verifikasi versi Gradle Wrapper (upgrade ke Gradle 8.2.1+ jika terdeteksi Gradle 7.x)
-          if [ -f "android/gradle/wrapper/gradle-wrapper.properties" ]; then
-            if grep -q "gradle-7\." android/gradle/wrapper/gradle-wrapper.properties; then
-              echo "[WARN] Mengupgrade Gradle Wrapper 7.x ke 8.2.1 untuk kompatibilitas JDK 21..."
-              sed -i 's/gradle-7\.[0-9.]*-/gradle-8.2.1-/g' android/gradle/wrapper/gradle-wrapper.properties
-            fi
-            echo "[INFO] Isi gradle-wrapper.properties:"
-            cat android/gradle/wrapper/gradle-wrapper.properties
-          fi
-
-      # 9. Build APK Debug dengan Gradle (mengabaikan lint dan test untuk mempercepat build)
-      - name: 9. Build APK Debug dengan Gradle
+      - name: 8. Build APK with Gradle
         timeout-minutes: 15
         run: |
-          cd android
-          echo "[INFO] Menjalankan ./gradlew assembleDebug (mengabaikan test & lint)..."
-          ./gradlew assembleDebug -x lint -x test --no-daemon --stacktrace
-          cd ..
-
-      # 10. Pencarian Fleksibel (find) & Persiapan Output Berkas APK
-      - name: 10. Organisasi File Output APK
-        run: |
-          mkdir -p build-artifacts
-          echo "[INFO] Mencari file APK yang dihasilkan Gradle..."
-          FOUND_APK=$(find android/app/build/outputs/apk -name "*.apk" -type f | head -n 1)
-          if [ -n "$FOUND_APK" ]; then
-            echo "[SUCCESS] File APK ditemukan di: $FOUND_APK"
-            cp "$FOUND_APK" build-artifacts/BengkelQu-1.60-debug.apk
-            echo "[SUCCESS] Berkas siap: build-artifacts/BengkelQu-1.60-debug.apk"
-          elif [ -f "android/app/build/outputs/apk/debug/app-debug.apk" ]; then
-            cp android/app/build/outputs/apk/debug/app-debug.apk build-artifacts/BengkelQu-1.60-debug.apk
-            echo "[SUCCESS] Berkas siap: build-artifacts/BengkelQu-1.60-debug.apk"
+          if [ -f "./gradlew" ]; then
+            ./gradlew assembleDebug --no-daemon --stacktrace -x test -x lint
           else
-            echo "[ERROR] File APK tidak ditemukan di output Gradle!"
-            find android -name "*.apk" || true
+            cd android
+            ./gradlew assembleDebug --no-daemon --stacktrace -x test -x lint
+            cd ..
+          fi
+
+      - name: 9. Siapkan File APK
+        run: |
+          mkdir -p output-apk
+          APK_FILE=$(find . -type f \( -name "*debug.apk" -o -name "*.apk" \) | grep -v "node_modules" | head -n 1)
+          if [ -n "$APK_FILE" ] && [ -f "$APK_FILE" ]; then
+            cp "$APK_FILE" output-apk/BengkelQu-1.60.apk
+            echo "[SUCCESS] APK Berhasil dibuat di output-apk/BengkelQu-1.60.apk (Sumber: $APK_FILE)"
+            ls -lh output-apk/
+          else
+            echo "[ERROR] File APK tidak ditemukan di build outputs!"
+            find . -name "*.apk" || true
             exit 1
           fi
 
-      # 11. Upload Hasil APK Sebagai Artifact GitHub
-      - name: 11. Upload Artifact APK (actions/upload-artifact@v4)
+      - name: 10. Upload APK Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: BengkelQu-1.60-Android-APK-Debug
-          path: build-artifacts/*.apk
+          name: BengkelQu-1.60-APK
+          path: output-apk/BengkelQu-1.60.apk
           retention-days: 30
           if-no-files-found: error

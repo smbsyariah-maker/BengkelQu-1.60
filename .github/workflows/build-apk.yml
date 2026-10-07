@@ -138,7 +138,11 @@ jobs:
       - name: 10. Build Android APK Debug dengan Gradle
         run: |
           cd android
-          ./gradlew assembleDebug --no-daemon --stacktrace -Dorg.gradle.jvmargs="-Xmx2048m -XX:MaxMetaspaceSize=512m"
+          # Pastikan local.properties mengenali android home jika belum ada
+          if [ ! -f local.properties ]; then
+            echo "sdk.dir=$ANDROID_HOME" > local.properties
+          fi
+          ./gradlew assembleDebug --no-daemon --stacktrace
           cd ..
 
       # 11. Organisasi file output APK

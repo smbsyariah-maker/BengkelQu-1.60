@@ -11,18 +11,18 @@ on:
 
 jobs:
   build-apk:
-    name: Build Android APK (Debug) dengan Gradle & Java 17
+    name: Build Android APK (Debug) - Capacitor, Gradle & Java 17
     runs-on: ubuntu-latest
     env:
       NODE_VERSION: '22'
 
     steps:
-      # 1. Checkout kode repositori
+      # Tahap 1: Checkout Repository menggunakan actions/checkout@v4
       - name: 1. Checkout Repository
         uses: actions/checkout@v4
 
-      # 2. Pengecekan file .env (menyalin dari .env.example jika belum tersedia)
-      - name: 2. Pengecekan File .env (Copy dari .env.example jika belum tersedia)
+      # Pengecekan file .env (Copy dari .env.example jika belum tersedia)
+      - name: Pengecekan File .env
         run: |
           if [ ! -f .env ]; then
             if [ -f .env.example ]; then
@@ -37,8 +37,8 @@ jobs:
             echo "[INFO] File .env sudah ada."
           fi
 
-      # 3. Setup Node.js 22 (Capacitor CLI v7+ memerlukan Node.js minimal v22.0.0)
-      - name: 3. Set Up Node.js 22
+      # Tahap 2: Setup Node.js versi 22 (actions/setup-node@v4)
+      - name: 2. Setup Node.js Versi 22
         uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
@@ -46,11 +46,42 @@ jobs:
 
       - name: Verifikasi Versi Node.js & npm
         run: |
-          echo "[INFO] Versi Node.js: $(node -v)"
-          echo "[INFO] Versi npm: $(npm -v)"
+          echo "[INFO] Versi Node.js aktif: $(node -v)"
+          echo "[INFO] Versi npm aktif: $(npm -v)"
 
-      # 4. Setup Java JDK 17 (Temurin)
-      - name: 4. Set Up Java JDK 17
+      # Tahap 3: Install Dependencies Web & Build (Vite/TypeScript)
+      - name: 3. Install Dependencies Web & Build (Vite)
+        run: |
+          echo "[INFO] Menginstal dependensi npm..."
+          npm install --legacy-peer-deps
+          echo "[INFO] Menjalankan build Vite ke folder dist..."
+          npm run build
+          if [ -d "dist" ]; then
+            echo "[SUCCESS] Build web Vite berhasil selesai (folder dist tersedia)."
+          else
+            echo "[ERROR] Folder dist tidak ditemukan setelah build!"
+            exit 1
+          fi
+
+      # Tahap 4: Setup Platform Android Capacitor (Sinkronisasi Web ke Android)
+      - name: 4. Setup Platform Android Capacitor
+        run: |
+          echo "[INFO] Menyiapkan paket Capacitor..."
+          npm install --legacy-peer-deps @capacitor/core@latest @capacitor/cli@latest @capacitor/android@latest
+          
+          # Inisialisasi folder android jika belum ada
+          if [ ! -d "android" ]; then
+            echo "[INFO] Folder android belum ada. Menginisialisasi proyek Android native..."
+            npx cap add android
+          fi
+          
+          # Sinkronisasikan hasil build dist/ ke platform Android
+          echo "[INFO] Menjalankan npx cap sync android..."
+          npx cap sync android
+          echo "[SUCCESS] Sinkronisasi web assets ke Android selesai."
+
+      # Tahap 5: Setup Java 17 (actions/setup-java@v4 dengan distribusi temurin)
+      - name: 5. Setup Java 17 (Temurin)
         uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
@@ -60,23 +91,8 @@ jobs:
         run: |
           java -version
 
-      # 5. Otomatis membuat atau mendeteksi file debug.keystore
-      - name: 5. Otomatis Deteksi atau Buat debug.keystore
-        run: |
-          mkdir -p ~/.android
-          if [ ! -f ~/.android/debug.keystore ]; then
-            echo "[INFO] debug.keystore belum ada. Membuat debug.keystore baru..."
-            keytool -genkey -v -keystore ~/.android/debug.keystore \
-              -storepass android -alias androiddebugkey -keypass android \
-              -keyalg RSA -keysize 2048 -validity 10000 \
-              -dname "CN=Android Debug,O=Android,C=US"
-            echo "[SUCCESS] debug.keystore berhasil dibuat di ~/.android/debug.keystore"
-          else
-            echo "[INFO] debug.keystore sudah ditemukan di ~/.android/debug.keystore"
-          fi
-
-      # 6. Konfigurasi Android SDK bawaan GitHub Runner & Terima Lisensi
-      - name: 6. Konfigurasi Android SDK bawaan Runner & Lisensi
+      # Tahap 6: Setup Android SDK & Lisensi
+      - name: 6. Setup Android SDK & Lisensi
         run: |
           if [ -z "$ANDROID_HOME" ]; then
             export ANDROID_HOME=/usr/local/lib/android/sdk
@@ -91,80 +107,60 @@ jobs:
           elif command -v sdkmanager &> /dev/null; then
             yes | sdkmanager --licenses || true
           fi
-          echo "[SUCCESS] Android SDK siap digunakan."
+          echo "[SUCCESS] Android SDK & lisensi siap digunakan."
 
-      # 7. Install dependencies web dengan legacy-peer-deps dan build Vite
-      - name: 7. Install Dependencies dan Build Web App
+      # Tahap 7: Build APK Debug dengan Gradle (assembleDebug)
+      - name: 7. Build APK Debug dengan Gradle
         run: |
-          npm install --legacy-peer-deps
-          npm run build
-
-      # 8. Setup platform native Android via Capacitor
-      - name: 8. Setup Platform Android via Capacitor
-        run: |
-          # Install dependencies Capacitor dengan kompatibilitas Node 22
-          npm install --legacy-peer-deps @capacitor/core@latest @capacitor/cli@latest @capacitor/android@latest
-          
-          # Inisialisasi folder android jika belum ada
-          if [ ! -d "android" ]; then
-            echo "[INFO] Menginisialisasi proyek Android native dengan Capacitor..."
-            npx cap add android
+          # Otomatisasi pembuatan debug keystore jika belum ada
+          mkdir -p ~/.android
+          if [ ! -f ~/.android/debug.keystore ]; then
+            echo "[INFO] debug.keystore belum ada. Membuat keystore baru..."
+            keytool -genkey -v -keystore ~/.android/debug.keystore \
+              -storepass android -alias androiddebugkey -keypass android \
+              -keyalg RSA -keysize 2048 -validity 10000 \
+              -dname "CN=Android Debug,O=Android,C=US"
+            echo "[SUCCESS] debug.keystore berhasil dibuat."
           fi
-          
-          # Sinkronisasikan hasil build dist/ ke platform Android
-          echo "[INFO] Sinkronisasi web assets ke Android..."
-          npx cap sync android
-          
-          # Salin debug.keystore ke folder android/app
+
           if [ -d "android/app" ]; then
             cp ~/.android/debug.keystore android/app/debug.keystore || true
-            echo "[SUCCESS] debug.keystore disalin ke android/app/debug.keystore"
           fi
 
-      # 9. Menyiapkan hak akses chmod +x untuk gradlew
-      - name: 9. Menyiapkan Hak Akses chmod +x untuk gradlew
-        run: |
-          if [ -f "android/gradlew" ]; then
-            chmod +x android/gradlew
-            echo "[SUCCESS] Hak akses chmod +x berhasil diberikan ke android/gradlew"
-          elif [ -f "./gradlew" ]; then
-            chmod +x ./gradlew
-            echo "[SUCCESS] Hak akses chmod +x berhasil diberikan ke ./gradlew"
-          else
-            echo "[WARN] File gradlew tidak ditemukan."
-          fi
-
-      # 10. Build Android APK Debug menggunakan Gradle
-      - name: 10. Build Android APK Debug dengan Gradle
-        run: |
           cd android
-          # Pastikan local.properties mengenali android home jika belum ada
+
+          # Otomatisasi pembuatan file local.properties jika belum ada
           if [ ! -f local.properties ]; then
+            echo "[INFO] Membuat local.properties dengan sdk.dir=$ANDROID_HOME..."
             echo "sdk.dir=$ANDROID_HOME" > local.properties
           fi
+
+          # Memastikan hak akses executable untuk gradlew
+          if [ -f "gradlew" ]; then
+            chmod +x gradlew
+            echo "[SUCCESS] Izin chmod +x diberikan ke gradlew."
+          fi
+
+          # Menjalankan kompilasi APK Debug
+          echo "[INFO] Menjalankan ./gradlew assembleDebug..."
           ./gradlew assembleDebug --no-daemon --stacktrace
           cd ..
 
-      # 11. Organisasi file output APK
-      - name: 11. Siapkan Berkas APK Output
-        run: |
+          # Organisasi file output APK
           mkdir -p build-artifacts
           FOUND_APK=$(find android/app/build/outputs/apk -name "*.apk" -type f | head -n 1)
           if [ -n "$FOUND_APK" ]; then
             echo "[INFO] Menemukan file APK di: $FOUND_APK"
             cp "$FOUND_APK" build-artifacts/BengkelQu-1.60-debug.apk
-            echo "[SUCCESS] File APK berhasil disiapkan di build-artifacts/BengkelQu-1.60-debug.apk"
-          elif [ -f "android/app/build/outputs/apk/debug/app-debug.apk" ]; then
-            cp android/app/build/outputs/apk/debug/app-debug.apk build-artifacts/BengkelQu-1.60-debug.apk
-            echo "[SUCCESS] File APK siap: build-artifacts/BengkelQu-1.60-debug.apk"
+            echo "[SUCCESS] File APK disalin ke: build-artifacts/BengkelQu-1.60-debug.apk"
           else
             echo "[ERROR] File APK tidak ditemukan di direktori output Gradle!"
             find android -name "*.apk" || true
             exit 1
           fi
 
-      # 12. Upload hasil file APK menggunakan actions/upload-artifact@v4
-      - name: 12. Upload Hasil File APK (actions/upload-artifact@v4)
+      # Tahap 8: Upload Artifact APK (actions/upload-artifact@v4)
+      - name: 8. Upload Artifact APK (actions/upload-artifact@v4)
         uses: actions/upload-artifact@v4
         with:
           name: BengkelQu-1.60-Android-APK-Debug

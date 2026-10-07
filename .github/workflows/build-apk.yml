@@ -53,13 +53,12 @@ jobs:
           echo "[INFO] Node.js version: $(node -v)"
           echo "[INFO] npm version: $(npm -v)"
 
-      # 4. Setup Java JDK 21 (Temurin) dengan Gradle Cache
-      - name: 4. Setup Java JDK 21 (Temurin) & Gradle Cache
+      # 4. Setup Java JDK 21 (Temurin)
+      - name: 4. Setup Java JDK 21 (Temurin)
         uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
           java-version: '21'
-          cache: 'gradle'
 
       - name: Verifikasi Versi Java
         run: |

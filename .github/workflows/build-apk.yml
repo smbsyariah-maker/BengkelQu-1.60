@@ -111,8 +111,10 @@ jobs:
 
       # Tahap 7: Build APK Debug dengan Gradle (assembleDebug)
       - name: 7. Build APK Debug dengan Gradle
+        env:
+          GRADLE_OPTS: "-Dorg.gradle.jvmargs='-Xmx2048m -XX:MaxMetaspaceSize=512m -XX:+HeapDumpOnOutOfMemoryError' -Dorg.gradle.daemon=false"
         run: |
-          # Otomatisasi pembuatan debug keystore jika belum ada
+          # 1. Otomatisasi pembuatan debug keystore jika belum ada
           mkdir -p ~/.android
           if [ ! -f ~/.android/debug.keystore ]; then
             echo "[INFO] debug.keystore belum ada. Membuat keystore baru..."
@@ -129,30 +131,52 @@ jobs:
 
           cd android
 
-          # Otomatisasi pembuatan file local.properties jika belum ada
-          if [ ! -f local.properties ]; then
-            echo "[INFO] Membuat local.properties dengan sdk.dir=$ANDROID_HOME..."
-            echo "sdk.dir=$ANDROID_HOME" > local.properties
+          # 2. Otomatisasi pembuatan & penulisan file local.properties dengan sdk.dir=$ANDROID_HOME
+          if [ -z "$ANDROID_HOME" ]; then
+            export ANDROID_HOME=/usr/local/lib/android/sdk
           fi
+          echo "[INFO] Memastikan local.properties terisi dengan sdk.dir=$ANDROID_HOME..."
+          echo "sdk.dir=$ANDROID_HOME" > local.properties
+          echo "[INFO] Isi file local.properties:"
+          cat local.properties
 
-          # Memastikan hak akses executable untuk gradlew
+          # 3. Optimasi memori Gradle pada gradle.properties untuk mencegah Out of Memory (OOM)
+          if [ -f gradle.properties ]; then
+            echo "" >> gradle.properties
+            echo "org.gradle.jvmargs=-Xmx2048m -XX:MaxMetaspaceSize=512m" >> gradle.properties
+            echo "org.gradle.parallel=false" >> gradle.properties
+          else
+            cat << 'EOF' > gradle.properties
+org.gradle.jvmargs=-Xmx2048m -XX:MaxMetaspaceSize=512m
+org.gradle.parallel=false
+EOF
+          fi
+          echo "[INFO] Konfigurasi memori gradle.properties siap."
+
+          # 4. Memastikan hak akses executable untuk gradlew
           if [ -f "gradlew" ]; then
             chmod +x gradlew
             echo "[SUCCESS] Izin chmod +x diberikan ke gradlew."
+          else
+            echo "[ERROR] File gradlew tidak ditemukan di dalam folder android!"
+            exit 1
           fi
 
-          # Menjalankan kompilasi APK Debug
+          # 5. Menjalankan kompilasi APK Debug dengan memori terkontrol
           echo "[INFO] Menjalankan ./gradlew assembleDebug..."
-          ./gradlew assembleDebug --no-daemon --stacktrace
+          ./gradlew assembleDebug --no-daemon --stacktrace -Dorg.gradle.jvmargs="-Xmx2048m -XX:MaxMetaspaceSize=512m"
           cd ..
 
-          # Organisasi file output APK
+          # 6. Organisasi file output APK
           mkdir -p build-artifacts
           FOUND_APK=$(find android/app/build/outputs/apk -name "*.apk" -type f | head -n 1)
           if [ -n "$FOUND_APK" ]; then
             echo "[INFO] Menemukan file APK di: $FOUND_APK"
             cp "$FOUND_APK" build-artifacts/BengkelQu-1.60-debug.apk
             echo "[SUCCESS] File APK disalin ke: build-artifacts/BengkelQu-1.60-debug.apk"
+          elif [ -f "android/app/build/outputs/apk/debug/app-debug.apk" ]; then
+            cp android/app/build/outputs/apk/debug/app-debug.apk build-artifacts/BengkelQu-1.60-debug.apk
+            echo "[SUCCESS] File APK siap: build-artifacts/BengkelQu-1.60-debug.apk"
           else
             echo "[ERROR] File APK tidak ditemukan di direktori output Gradle!"
             find android -name "*.apk" || true

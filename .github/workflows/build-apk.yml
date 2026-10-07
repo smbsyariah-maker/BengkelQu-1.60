@@ -167,12 +167,30 @@ jobs:
             exit 1
           fi
 
-          # 5. Menjalankan kompilasi APK Debug dengan info detail
+          # 5. Verifikasi & Sinkronisasi Kompatibilitas Versi Gradle & AGP untuk Java 17
+          echo "[INFO] Memeriksa versi Gradle Wrapper:"
+          if [ -f "gradle/wrapper/gradle-wrapper.properties" ]; then
+            cat gradle/wrapper/gradle-wrapper.properties
+            # Jika terdeteksi Gradle versi 7.x lama yang tidak kompatibel dengan Java 17, otomatis sesuaikan ke Gradle 8.2.1
+            if grep -q "gradle-7\." gradle/wrapper/gradle-wrapper.properties; then
+              echo "[WARN] Terdeteksi Gradle 7.x. Mengupdate distributionUrl ke Gradle 8.2.1 agar mendukung Java 17..."
+              sed -i 's/gradle-7\.[0-9.]*-/gradle-8.2.1-/g' gradle/wrapper/gradle-wrapper.properties
+              echo "[INFO] Isi gradle-wrapper.properties setelah penyesuaian:"
+              cat gradle/wrapper/gradle-wrapper.properties
+            fi
+          fi
+
+          if [ -f "build.gradle" ]; then
+            echo "[INFO] Konfigurasi AGP (Android Gradle Plugin) di build.gradle:"
+            grep -i "com.android.tools.build:gradle" build.gradle || true
+          fi
+
+          # 6. Menjalankan kompilasi APK Debug dengan info detail
           echo "[INFO] Menjalankan ./gradlew assembleDebug --info..."
           ./gradlew assembleDebug --info --no-daemon --stacktrace
           cd ..
 
-          # 6. Organisasi file output APK
+          # 7. Organisasi file output APK
           mkdir -p build-artifacts
           FOUND_APK=$(find android/app/build/outputs/apk -name "*.apk" -type f | head -n 1)
           if [ -n "$FOUND_APK" ]; then

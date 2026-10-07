@@ -13,8 +13,11 @@ jobs:
   build-apk:
     name: Build Android APK (Debug) - Capacitor, Gradle & Java 17
     runs-on: ubuntu-latest
+    timeout-minutes: 25
     env:
       NODE_VERSION: '22'
+      CI: 'true'
+      CAPACITOR_TELEMETRY: 'false'
 
     steps:
       # Tahap 1: Checkout Repository menggunakan actions/checkout@v4
@@ -101,16 +104,22 @@ jobs:
           echo "ANDROID_HOME=$ANDROID_HOME" >> $GITHUB_ENV
           echo "ANDROID_SDK_ROOT=$ANDROID_HOME" >> $GITHUB_ENV
           
-          # Menerima lisensi Android SDK bawaan GitHub Runner
+          # Tulis file lisensi resmi Android SDK (mencegah infinite loop/hang pada runner)
+          mkdir -p "$ANDROID_HOME/licenses" 2>/dev/null || true
+          echo "24333f8a63b6825ea9c5514f83c2829b004d1fee" > "$ANDROID_HOME/licenses/android-sdk-license" 2>/dev/null || true
+          echo "d56f5187479451eabf01fb78af6dfcb131a6481e" >> "$ANDROID_HOME/licenses/android-sdk-license" 2>/dev/null || true
+          echo "84831b9409646a297e2010c22e49c7161876543a" > "$ANDROID_HOME/licenses/android-sdk-preview-license" 2>/dev/null || true
+          echo "851471324971a1c1c417b76d18204d08483b9042" > "$ANDROID_HOME/licenses/android-sdk-arm-dbt-license" 2>/dev/null || true
+          
+          # Panggil sdkmanager dengan batas timeout 10 detik agar tidak pernah macet
           if [ -d "$ANDROID_HOME/cmdline-tools/latest/bin" ]; then
-            yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses || true
-          elif command -v sdkmanager &> /dev/null; then
-            yes | sdkmanager --licenses || true
+            timeout 10s "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses <<< $(printf 'y\ny\ny\ny\ny\ny\n') 2>/dev/null || true
           fi
           echo "[SUCCESS] Android SDK & lisensi siap digunakan."
 
       # Tahap 7: Build APK Debug dengan Gradle (assembleDebug)
       - name: 7. Build APK Debug dengan Gradle
+        timeout-minutes: 15
         env:
           GRADLE_OPTS: "-Dorg.gradle.jvmargs='-Xmx2048m -XX:MaxMetaspaceSize=512m -XX:+HeapDumpOnOutOfMemoryError' -Dorg.gradle.daemon=false"
         run: |

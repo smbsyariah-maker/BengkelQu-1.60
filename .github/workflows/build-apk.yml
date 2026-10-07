@@ -46,12 +46,10 @@ jobs:
 
       - name: 6. Prepare environment and debug keystore
         run: |
-          # Siapkan .env
           if [ ! -f .env ]; then
             cp .env.example .env 2>/dev/null || touch .env
           fi
 
-          # Buat debug keystore jika belum ada
           mkdir -p ~/.android
           if [ ! -f ~/.android/debug.keystore ]; then
             keytool -genkeypair -v -keystore ~/.android/debug.keystore -storepass android -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Android Debug,O=Android,C=US"
@@ -64,30 +62,17 @@ jobs:
 
       - name: 8. Sync Capacitor Android Platform
         run: |
-          # Buat platform android jika belum ada
           if [ ! -d "android" ] || [ ! -f "android/gradlew" ]; then
             echo "[INFO] Menambahkan platform android via Capacitor..."
             npx cap add android
           fi
 
-          # Sinkronkan aset web dist ke native Android
           npx cap sync android
 
-          # Salin debug keystore jika ada
           if [ -d "android/app" ]; then
             cp ~/.android/debug.keystore android/app/debug.keystore 2>/dev/null || true
           fi
 
-          # Pastikan gradle.properties optimal (enableJetifier harus false di AGP modern)
-          cat << 'EOF' > android/gradle.properties
-org.gradle.jvmargs=-Xmx2048m -XX:MaxMetaspaceSize=512m -Dfile.encoding=UTF-8
-org.gradle.daemon=false
-org.gradle.parallel=false
-android.useAndroidX=true
-android.enableJetifier=false
-EOF
-
-          # Berikan izin eksekusi gradlew
           chmod +x android/gradlew 2>/dev/null || true
 
       - name: 9. Build APK with Gradle

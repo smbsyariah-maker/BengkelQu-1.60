@@ -123,22 +123,24 @@ jobs:
 
           # Penyuntikan konfigurasi target SDK 35 pada variables.gradle
           echo "[INFO] Menyuntikkan konfigurasi SDK 35 ke android/variables.gradle..."
-          cat << 'EOF' > android/variables.gradle
-ext {
-    minSdkVersion = 22
-    compileSdkVersion = 35
-    targetSdkVersion = 35
-    androidxActivityVersion = '1.9.2'
-    androidxAppCompatVersion = '1.7.0'
-    androidxCoordinatorLayoutVersion = '1.2.0'
-    androidxCoreVersion = '1.13.1'
-    androidxFragmentVersion = '1.8.3'
-    junitVersion = '4.13.2'
-    androidxJunitVersion = '1.2.1'
-    androidxEspressoCoreVersion = '3.6.1'
-    cordovaAndroidVersion = '10.1.1'
-}
-EOF
+          {
+            echo "ext {"
+            echo "    minSdkVersion = 22"
+            echo "    compileSdkVersion = 35"
+            echo "    targetSdkVersion = 35"
+            echo "    androidxActivityVersion = '1.9.2'"
+            echo "    androidxAppCompatVersion = '1.7.0'"
+            echo "    androidxCoordinatorLayoutVersion = '1.2.0'"
+            echo "    androidxCoreVersion = '1.13.1'"
+            echo "    androidxFragmentVersion = '1.8.3'"
+            echo "    junitVersion = '4.13.2'"
+            echo "    androidxJunitVersion = '1.2.1'"
+            echo "    androidxEspressoCoreVersion = '3.6.1'"
+            echo "    cordovaAndroidVersion = '10.1.1'"
+            echo "}"
+          } > android/variables.gradle
+          echo "[INFO] Isi android/variables.gradle:"
+          cat android/variables.gradle
 
           # Penyuntikan optimasi memori dan konfigurasi pada android/gradle.properties
           echo "[INFO] Mengonfigurasi android/gradle.properties..."

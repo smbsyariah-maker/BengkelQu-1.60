@@ -141,17 +141,13 @@ jobs:
           cat local.properties
 
           # 3. Optimasi memori Gradle pada gradle.properties untuk mencegah Out of Memory (OOM)
-          if [ -f gradle.properties ]; then
-            echo "" >> gradle.properties
-            echo "org.gradle.jvmargs=-Xmx2048m -XX:MaxMetaspaceSize=512m" >> gradle.properties
-            echo "org.gradle.parallel=false" >> gradle.properties
-          else
-            cat << 'EOF' > gradle.properties
-org.gradle.jvmargs=-Xmx2048m -XX:MaxMetaspaceSize=512m
-org.gradle.parallel=false
-EOF
+          if [ ! -f gradle.properties ]; then
+            touch gradle.properties
           fi
-          echo "[INFO] Konfigurasi memori gradle.properties siap."
+          echo "org.gradle.jvmargs=-Xmx2048m -XX:MaxMetaspaceSize=512m" >> gradle.properties
+          echo "org.gradle.parallel=false" >> gradle.properties
+          echo "[INFO] Konfigurasi memori gradle.properties siap:"
+          cat gradle.properties
 
           # 4. Memastikan hak akses executable untuk gradlew
           if [ -f "gradlew" ]; then

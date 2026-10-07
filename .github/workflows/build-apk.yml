@@ -167,9 +167,9 @@ jobs:
             exit 1
           fi
 
-          # 5. Menjalankan kompilasi APK Debug dengan memori terkontrol
-          echo "[INFO] Menjalankan ./gradlew assembleDebug..."
-          ./gradlew assembleDebug --no-daemon --stacktrace -Dorg.gradle.jvmargs="-Xmx2048m -XX:MaxMetaspaceSize=512m"
+          # 5. Menjalankan kompilasi APK Debug dengan info detail
+          echo "[INFO] Menjalankan ./gradlew assembleDebug --info..."
+          ./gradlew assembleDebug --info --no-daemon --stacktrace
           cd ..
 
           # 6. Organisasi file output APK

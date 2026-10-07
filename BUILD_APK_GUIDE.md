@@ -38,6 +38,6 @@ Setiap kali Anda melakukan push ke branch `main`, `master`, atau push tag versi 
 
 1. Buka riwayat proses build yang sudah selesai (bertanda centang hijau ✅).
 2. Gulir ke bawah ke bagian **Artifacts**.
-3. Klik artifact **`BengkelQu-1.60-Android-APK-Debug`** untuk mengunduh file zip yang berisi:
-   - 📱 **`BengkelQu-1.60-debug.apk`**
+3. Klik artifact **`BengkelQu-1.60-APK`** untuk mengunduh file zip yang berisi:
+   - 📱 **`BengkelQu-1.60.apk`**
 4. Kirim dan instal file `.apk` tersebut langsung di ponsel Android Anda!

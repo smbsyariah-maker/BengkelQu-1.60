@@ -16,32 +16,35 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 25
     env:
-      NODE_VERSION: '22'
-      CI: 'true'
+      CI: 'false'
       CAPACITOR_TELEMETRY: 'false'
 
     steps:
       - name: 1. Checkout Repository
         uses: actions/checkout@v4
 
-      - name: 2. Setup Node.js (v22 LTS)
+      - name: 2. Setup Node.js (v20 LTS)
         uses: actions/setup-node@v4
         with:
-          node-version: 22
-          check-latest: true
+          node-version: 20
+          cache: 'npm'
 
-      - name: 3. Set up JDK 21 (Temurin)
+      - name: 3. Set up JDK 17 (Temurin)
         uses: actions/setup-java@v4
         with:
-          java-version: '21'
+          java-version: '17'
           distribution: 'temurin'
 
-      - name: 4. Setup Android SDK Tools & Licenses
+      - name: 4. Setup Android SDK Tools
         uses: android-actions/setup-android@v4
         with:
           packages: 'platforms;android-35 build-tools;35.0.0'
 
-      - name: 5. Prepare environment and debug keystore
+      - name: 5. Accept Android SDK Licenses
+        run: |
+          yes | sdkmanager --licenses || true
+
+      - name: 6. Prepare environment and debug keystore
         run: |
           # Siapkan .env
           if [ ! -f .env ]; then
@@ -50,103 +53,70 @@ jobs:
 
           # Buat debug keystore jika belum ada
           mkdir -p ~/.android
-          if [ -f debug.keystore.base64 ]; then
-            base64 -d debug.keystore.base64 > debug.keystore
-            cp debug.keystore ~/.android/debug.keystore 2>/dev/null || true
-          elif [ ! -f ~/.android/debug.keystore ]; then
+          if [ ! -f ~/.android/debug.keystore ]; then
             keytool -genkeypair -v -keystore ~/.android/debug.keystore -storepass android -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Android Debug,O=Android,C=US"
           fi
 
-      - name: 6. Install Dependencies & Build Web App
+      - name: 7. Install Dependencies & Build Web App
         run: |
-          npm install --legacy-peer-deps
+          npm ci || npm install --legacy-peer-deps
           npm run build
 
-      - name: 7. Inisialisasi & Sinkronisasi Platform Android
+      - name: 8. Sync Capacitor Android Platform
         run: |
-          # Pastikan paket Capacitor terpasang
-          npm install --legacy-peer-deps @capacitor/core@latest @capacitor/cli@latest @capacitor/android@latest
-
-          # Inisialisasi platform android jika gradlew belum ada
-          if [ ! -f "android/gradlew" ]; then
-            echo "[INFO] Membuat platform android native via Capacitor..."
-            rm -rf android
+          # Buat platform android jika belum ada
+          if [ ! -d "android" ] || [ ! -f "android/gradlew" ]; then
+            echo "[INFO] Menambahkan platform android via Capacitor..."
             npx cap add android
           fi
 
-          echo "[INFO] Menyinkronkan aset web ke Android..."
+          # Sinkronkan aset web dist ke native Android
           npx cap sync android
 
-          # Salin debug keystore ke folder android/app jika ada
+          # Salin debug keystore jika ada
           if [ -d "android/app" ]; then
             cp ~/.android/debug.keystore android/app/debug.keystore 2>/dev/null || true
           fi
 
-          # Konfigurasi variables.gradle ke SDK 35 yang kompatibel
-          {
-            echo "ext {"
-            echo "    minSdkVersion = 24"
-            echo "    compileSdkVersion = 35"
-            echo "    targetSdkVersion = 35"
-            echo "    androidxActivityVersion = '1.9.3'"
-            echo "    androidxAppCompatVersion = '1.7.0'"
-            echo "    androidxCoordinatorLayoutVersion = '1.2.0'"
-            echo "    androidxCoreVersion = '1.15.0'"
-            echo "    androidxFragmentVersion = '1.8.5'"
-            echo "    coreSplashScreenVersion = '1.0.1'"
-            echo "    androidxWebkitVersion = '1.12.1'"
-            echo "    junitVersion = '4.13.2'"
-            echo "    androidxJunitVersion = '1.2.1'"
-            echo "    androidxEspressoCoreVersion = '3.6.1'"
-            echo "    cordovaAndroidVersion = '14.0.1'"
-            echo "}"
-          } > android/variables.gradle
+          # Pastikan gradle.properties optimal (enableJetifier harus false di AGP modern)
+          cat << 'EOF' > android/gradle.properties
+org.gradle.jvmargs=-Xmx2048m -XX:MaxMetaspaceSize=512m -Dfile.encoding=UTF-8
+org.gradle.daemon=false
+org.gradle.parallel=false
+android.useAndroidX=true
+android.enableJetifier=false
+EOF
 
-          # Konfigurasi gradle.properties optimal untuk CI
-          {
-            echo "org.gradle.jvmargs=-Xmx2048m -XX:MaxMetaspaceSize=512m -Dfile.encoding=UTF-8"
-            echo "org.gradle.daemon=false"
-            echo "org.gradle.parallel=false"
-            echo "android.useAndroidX=true"
-            echo "android.enableJetifier=true"
-            echo "android.builder.sdkDownload=true"
-          } > android/gradle.properties
-
-          # Pastikan local.properties mengenali ANDROID_HOME
-          if [ -n "$ANDROID_HOME" ]; then
-            echo "sdk.dir=$ANDROID_HOME" > android/local.properties
-          fi
-
-          # Beri izin eksekusi gradlew di root dan di folder android
+          # Berikan izin eksekusi gradlew
           chmod +x android/gradlew 2>/dev/null || true
-          chmod +x gradlew 2>/dev/null || true
 
-      - name: 8. Build APK with Gradle
+      - name: 9. Build APK with Gradle
         timeout-minutes: 15
         run: |
-          if [ -f "./gradlew" ]; then
-            ./gradlew assembleDebug --no-daemon --stacktrace -x test -x lint
-          else
-            cd android
-            ./gradlew assembleDebug --no-daemon --stacktrace -x test -x lint
-            cd ..
-          fi
+          cd android
+          chmod +x ./gradlew
+          ./gradlew assembleDebug --no-daemon --stacktrace -x test -x lint
+          cd ..
 
-      - name: 9. Siapkan File APK
+      - name: 10. Siapkan File APK
         run: |
           mkdir -p output-apk
-          APK_FILE=$(find . -type f \( -name "*debug.apk" -o -name "*.apk" \) | grep -v "node_modules" | head -n 1)
+          APK_FILE=$(find android/app/build/outputs/apk/debug -type f -name "*.apk" 2>/dev/null | head -n 1)
+          if [ -z "$APK_FILE" ]; then
+            APK_FILE=$(find . -type f \( -name "*debug.apk" -o -name "*.apk" \) | grep -v "node_modules" | head -n 1)
+          fi
+
           if [ -n "$APK_FILE" ] && [ -f "$APK_FILE" ]; then
             cp "$APK_FILE" output-apk/BengkelQu-1.60.apk
-            echo "[SUCCESS] APK Berhasil dibuat di output-apk/BengkelQu-1.60.apk (Sumber: $APK_FILE)"
+            echo "[SUCCESS] File APK siap: output-apk/BengkelQu-1.60.apk"
             ls -lh output-apk/
           else
-            echo "[ERROR] File APK tidak ditemukan di build outputs!"
+            echo "[ERROR] File APK tidak ditemukan!"
             find . -name "*.apk" || true
             exit 1
           fi
 
-      - name: 10. Upload APK Artifact
+      - name: 11. Upload APK Artifact
         uses: actions/upload-artifact@v4
         with:
           name: BengkelQu-1.60-APK

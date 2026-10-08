@@ -247,3 +247,26 @@ export interface UserSession {
   autoLogin: boolean;
   loginTime: string;
 }
+
+export type SubscriptionPlanId = 'trial' | 'free' | 'basic' | 'core' | 'corporate';
+
+export type ProTierOption = 'basic' | 'core' | 'corporate';
+
+export type ProDurationOption = 1 | 3 | 6 | 12;
+
+export interface SubscriptionState {
+  planId: SubscriptionPlanId;
+  planName: string;
+  dailyRate: number; // 0 for free/trial, 1000 for basic, 2000 for core, 3000 for corporate
+  trialStartDate: number;
+  trialDurationDays: number;
+  isTrialActive: boolean;
+  trialDaysRemaining: number;
+  subscriptionExpiryDate?: number;
+  isSubscribed: boolean;
+  deviceId?: string;
+  activeSerialKey?: string;
+  subscriptionDurationMonths?: ProDurationOption;
+  activatedAt?: number;
+}
+

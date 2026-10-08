@@ -38,8 +38,17 @@ import {
   ProcurementRecord,
   MarketingCampaign,
   PromoVoucher,
-  ExpenseItem
+  ExpenseItem,
+  SubscriptionPlanId,
+  SubscriptionState,
+  ProDurationOption
 } from './types';
+import { 
+  getOrCreateDeviceId, 
+  validateSerialNumber, 
+  checkAndMigrateAppData,
+  PRO_TIERS
+} from './utils/licenseManager';
 import { AndroidFrame } from './components/common/AndroidFrame';
 import { BottomNavBar } from './components/common/BottomNavBar';
 import { HomeDashboard } from './components/home/HomeDashboard';
@@ -58,6 +67,7 @@ import { LoginScreen } from './components/auth/LoginScreen';
 import { NewQueueModal } from './components/modals/NewQueueModal';
 import { ReceiptModal } from './components/modals/ReceiptModal';
 import { NotificationDrawer } from './components/modals/NotificationDrawer';
+import { SubscriptionModal } from './components/modals/SubscriptionModal';
 
 export default function App() {
   // Persistence state
@@ -133,6 +143,157 @@ export default function App() {
     const saved = localStorage.getItem('bq_user_session');
     return saved ? JSON.parse(saved) : null;
   });
+
+  // 10-Day Trial & Monetization State (Langsung aktif saat install pertama)
+  const [subscription, setSubscription] = useState<SubscriptionState>(() => {
+    const saved = localStorage.getItem('bq_subscription');
+    const now = Date.now();
+    const currentDeviceId = getOrCreateDeviceId();
+
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        // Cek apakah sudah berlangganan PRO dengan tanggal kedaluwarsa
+        if (parsed.isSubscribed && parsed.subscriptionExpiryDate) {
+          const isStillValid = parsed.subscriptionExpiryDate > now;
+          return {
+            ...parsed,
+            deviceId: currentDeviceId,
+            isSubscribed: isStillValid,
+            isTrialActive: false
+          };
+        }
+
+        // Cek sisa hari masa trial 10 hari
+        const trialStart = parsed.trialStartDate || now;
+        const daysPassed = Math.floor((now - trialStart) / (1000 * 60 * 60 * 24));
+        const daysRemaining = Math.max(0, (parsed.trialDurationDays || 10) - daysPassed);
+        const isTrialActive = daysRemaining > 0;
+
+        return {
+          ...parsed,
+          deviceId: currentDeviceId,
+          trialDaysRemaining: daysRemaining,
+          isTrialActive
+        };
+      } catch (e) {
+        // Fallback ke inisialisasi awal
+      }
+    }
+
+    // Install pertama: Trial 10 hari langsung aktif otomatis!
+    const initialTrial: SubscriptionState = {
+      planId: 'trial',
+      planName: '10-Day Full Trial (Semua Fitur Terbuka)',
+      dailyRate: 0,
+      trialStartDate: now,
+      trialDurationDays: 10,
+      isTrialActive: true,
+      trialDaysRemaining: 10,
+      isSubscribed: false,
+      deviceId: currentDeviceId
+    };
+    localStorage.setItem('bq_subscription', JSON.stringify(initialTrial));
+    return initialTrial;
+  });
+
+  // Auto-adapt data schema saat aplikasi dimuat (update langsung timpa tanpa uninstall)
+  useEffect(() => {
+    checkAndMigrateAppData();
+  }, []);
+
+  const [isSubscriptionModalOpen, setIsSubscriptionModalOpen] = useState(false);
+  const [featureLockToast, setFeatureLockToast] = useState<string | null>(null);
+
+  // Aktivasi Serial Number Pro (Berdasarkan Device ID dan Pilihan Durasi 1, 3, 6, 12 Bulan)
+  const handleActivateSerialKey = (serialKey: string): { success: boolean; message: string } => {
+    const activeDevId = subscription.deviceId || getOrCreateDeviceId();
+    const validation = validateSerialNumber(activeDevId, serialKey);
+
+    if (!validation.isValid || !validation.months) {
+      return {
+        success: false,
+        message: validation.error || 'Serial number tidak valid untuk Device ID perangkat ini.'
+      };
+    }
+
+    const months = validation.months;
+    const durationDays = months === 1 ? 30 : months === 3 ? 90 : months === 6 ? 180 : 365;
+    
+    // Perpanjang jika masih aktif, atau mulai dari sekarang
+    const baseTime = subscription.subscriptionExpiryDate && subscription.subscriptionExpiryDate > Date.now()
+      ? subscription.subscriptionExpiryDate
+      : Date.now();
+    const newExpiry = baseTime + durationDays * 24 * 60 * 60 * 1000;
+
+    const tier = validation.tier || 'core';
+    const tierMeta = PRO_TIERS[tier] || PRO_TIERS.core;
+    const dailyRate = tierMeta.dailyRate;
+
+    const updatedSub: SubscriptionState = {
+      ...subscription,
+      planId: tier,
+      planName: `${tierMeta.name} (${tierMeta.rateLabel})`,
+      dailyRate,
+      isSubscribed: true,
+      isTrialActive: false,
+      subscriptionExpiryDate: newExpiry,
+      subscriptionDurationMonths: months,
+      activeSerialKey: serialKey,
+      activatedAt: Date.now()
+    };
+
+    setSubscription(updatedSub);
+    localStorage.setItem('bq_subscription', JSON.stringify(updatedSub));
+
+    const formattedDate = new Date(newExpiry).toLocaleDateString('id-ID', {
+      day: '2-digit',
+      month: 'long',
+      year: 'numeric'
+    });
+
+    return {
+      success: true,
+      message: `Aktivasi ${tierMeta.name} Berhasil! Masa aktif ${months} Bulan (${durationDays} Hari) berlaku hingga ${formattedDate}.`
+    };
+  };
+
+  const handleSelectPlan = (planId: SubscriptionPlanId, durationDays: number = 30) => {
+    let rate = 0;
+    let name = 'Free Lifetime (Service, Kasir, Stok)';
+    if (planId === 'basic') {
+      rate = 1000;
+      name = 'Basic Pro (Rp 1.000/hari - Solo Mode)';
+    } else if (planId === 'core') {
+      rate = 2000;
+      name = 'Core Pro (Rp 2.000/hari - Multi-User)';
+    } else if (planId === 'corporate') {
+      rate = 3000;
+      name = 'Corporate Pro (Rp 3.000/hari - Multi-Cabang)';
+    }
+
+    const updated: SubscriptionState = {
+      ...subscription,
+      planId,
+      planName: name,
+      dailyRate: rate,
+      isSubscribed: planId !== 'free',
+      isTrialActive: false,
+      subscriptionExpiryDate: Date.now() + durationDays * 24 * 60 * 60 * 1000
+    };
+    setSubscription(updated);
+    localStorage.setItem('bq_subscription', JSON.stringify(updated));
+  };
+
+  const showFeatureLockNotice = (featureName: string) => {
+    setFeatureLockToast(
+      `Masa trial 10 hari telah usai. Fitur "${featureName}" masuk ke paket Pro. Menu Service, Kasir & Stok tetap 100% Gratis Selamanya!`
+    );
+    setTimeout(() => {
+      setFeatureLockToast(null);
+    }, 4500);
+    setIsSubscriptionModalOpen(true);
+  };
 
   const handleLoginSuccess = (session: UserSession) => {
     setUserSession(session);
@@ -215,12 +376,30 @@ export default function App() {
 
   // Navigation handlers
   const handleSelectModule = (mod: MenuModuleConfig) => {
+    // Free Tier Lock Rules:
+    // Core Free Menus: servis, kasir, inventaris (Always 100% Free & Unlimited)
+    // Non-Core Menus: pelanggan, marketing, basic, core, corporate (Require active trial or subscription)
+    const isCoreFreeMenu = mod.id === 'servis' || mod.id === 'kasir' || mod.id === 'inventaris';
+    const isPermitted = isCoreFreeMenu || subscription.isTrialActive || subscription.isSubscribed;
+
+    if (!isPermitted) {
+      showFeatureLockNotice(mod.title);
+      return;
+    }
+
     setSelectedModule(mod);
     setCurrentTab(mod.id);
     setCurrentScreen('submenu');
   };
 
   const handleSelectSubMenu = (subItem: SubMenuItemConfig) => {
+    // If Kasir submenus like piutang are accessed when trial expired without subscription
+    const isProKasirSubMenu = subItem.id === 'pos-receivable' || subItem.id === 'piutang';
+    if (isProKasirSubMenu && !subscription.isTrialActive && !subscription.isSubscribed) {
+      showFeatureLockNotice('Piutang Kasir');
+      return;
+    }
+
     setSelectedSubMenu(subItem);
     setCurrentScreen('feature');
   };
@@ -496,27 +675,75 @@ export default function App() {
     if (backupData.spareparts) setSpareparts(backupData.spareparts);
     if (backupData.transactions) setTransactions(backupData.transactions);
     if (backupData.customers) setCustomers(backupData.customers);
+    if (backupData.damagedGoods) setDamagedGoods(backupData.damagedGoods);
+    if (backupData.procurements) setProcurements(backupData.procurements);
+    if (backupData.campaigns) setCampaigns(backupData.campaigns);
+    if (backupData.vouchers) setVouchers(backupData.vouchers);
+    if (backupData.expenses) setExpenses(backupData.expenses);
     if (backupData.profile) setProfile(backupData.profile);
     if (backupData.permissions) setPermissions(backupData.permissions);
     if (backupData.branches) setBranches(backupData.branches);
+    if (backupData.subscription) {
+      setSubscription(backupData.subscription);
+      localStorage.setItem('bq_subscription', JSON.stringify(backupData.subscription));
+    }
   };
 
-  const handleResetData = (mode: 'daily' | 'factory') => {
+  const handleResetData = (mode: 'daily' | 'factory' | 'clean_slate') => {
     if (mode === 'daily') {
       // Clear completed queues and today's transactions
       setQueues((prev) => prev.filter((q) => q.status === 'menunggu' || q.status === 'proses'));
       setTransactions([]);
+    } else if (mode === 'clean_slate') {
+      // REQUIREMENT: Pastikan reset berfungsi hapus data tidak tersisa (0 records left)
+      setQueues([]);
+      setSpareparts([]);
+      setTransactions([]);
+      setCustomers([]);
+      setDamagedGoods([]);
+      setProcurements([]);
+      setCampaigns([]);
+      setVouchers([]);
+      setExpenses([]);
+      setNotifications([]);
+
+      localStorage.setItem('bq_queues', '[]');
+      localStorage.setItem('bq_spareparts', '[]');
+      localStorage.setItem('bq_transactions', '[]');
+      localStorage.setItem('bq_customers', '[]');
+      localStorage.setItem('bq_damaged_goods', '[]');
+      localStorage.setItem('bq_procurements', '[]');
+      localStorage.setItem('bq_campaigns', '[]');
+      localStorage.setItem('bq_vouchers', '[]');
+      localStorage.setItem('bq_kas_kecil', '[]');
+      localStorage.setItem('bq_notifs', '[]');
     } else if (mode === 'factory') {
-      // Full factory reset
+      // Muat ulang data sampel / demo pabrik lengkap
       setQueues(INITIAL_QUEUES);
       setSpareparts(INITIAL_SPAREPARTS);
       setTransactions(INITIAL_TRANSACTIONS);
       setCustomers(INITIAL_CUSTOMERS);
+      setDamagedGoods(INITIAL_DAMAGED_GOODS);
+      setProcurements(INITIAL_PROCUREMENTS);
+      setCampaigns(INITIAL_CAMPAIGNS);
+      setVouchers(INITIAL_VOUCHERS);
       setProfile(INITIAL_PROFILE);
       setPermissions(INITIAL_PERMISSIONS);
       setBranches(INITIAL_BRANCHES);
       setNotifications(INITIAL_NOTIFICATIONS);
-      localStorage.clear();
+
+      localStorage.setItem('bq_queues', JSON.stringify(INITIAL_QUEUES));
+      localStorage.setItem('bq_spareparts', JSON.stringify(INITIAL_SPAREPARTS));
+      localStorage.setItem('bq_transactions', JSON.stringify(INITIAL_TRANSACTIONS));
+      localStorage.setItem('bq_customers', JSON.stringify(INITIAL_CUSTOMERS));
+      localStorage.setItem('bq_damaged_goods', JSON.stringify(INITIAL_DAMAGED_GOODS));
+      localStorage.setItem('bq_procurements', JSON.stringify(INITIAL_PROCUREMENTS));
+      localStorage.setItem('bq_campaigns', JSON.stringify(INITIAL_CAMPAIGNS));
+      localStorage.setItem('bq_vouchers', JSON.stringify(INITIAL_VOUCHERS));
+      localStorage.setItem('bq_profile', JSON.stringify(INITIAL_PROFILE));
+      localStorage.setItem('bq_permissions', JSON.stringify(INITIAL_PERMISSIONS));
+      localStorage.setItem('bq_branches', JSON.stringify(INITIAL_BRANCHES));
+      localStorage.setItem('bq_notifs', JSON.stringify(INITIAL_NOTIFICATIONS));
     }
   };
 
@@ -543,6 +770,8 @@ export default function App() {
           profile={profile}
           userSession={userSession}
           onLogout={handleLogout}
+          subscription={subscription}
+          onOpenSubscription={() => setIsSubscriptionModalOpen(true)}
         />
       );
     }
@@ -676,6 +905,11 @@ export default function App() {
               spareparts={spareparts}
               transactions={transactions}
               customers={customers}
+              damagedGoods={damagedGoods}
+              procurements={procurements}
+              campaigns={campaigns}
+              vouchers={vouchers}
+              expenses={expenses}
               profile={profile}
               permissions={permissions}
               branches={branches}
@@ -683,6 +917,9 @@ export default function App() {
               onResetData={handleResetData}
               userSession={userSession}
               onLogout={handleLogout}
+              subscription={subscription}
+              onActivateSerialKey={handleActivateSerialKey}
+              onReloadDemoData={() => handleResetData('factory')}
             />
           );
         default:
@@ -753,6 +990,25 @@ export default function App() {
         notifications={notifications}
         onMarkAllAsRead={handleMarkAllNotifsRead}
       />
+
+      {/* Subscription Modal & Monetization Manager */}
+      <SubscriptionModal
+        isOpen={isSubscriptionModalOpen}
+        onClose={() => setIsSubscriptionModalOpen(false)}
+        subscription={subscription}
+        onSelectPlan={handleSelectPlan}
+        onActivateSerialKey={handleActivateSerialKey}
+        workshopName={profile.workshopName}
+        contactPhone={profile.phone}
+      />
+
+      {/* Feature Lock Notice Toast */}
+      {featureLockToast && (
+        <div className="fixed top-14 left-1/2 -translate-x-1/2 z-50 bg-slate-900/95 text-white text-xs px-4 py-3 rounded-2xl shadow-2xl flex items-center gap-2.5 max-w-[90%] border border-amber-500/50 animate-in fade-in slide-in-from-top-3">
+          <span className="text-base">🔒</span>
+          <p className="text-[11px] leading-tight font-medium text-slate-100">{featureLockToast}</p>
+        </div>
+      )}
     </AndroidFrame>
   );
 }

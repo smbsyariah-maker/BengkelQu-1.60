@@ -8,10 +8,25 @@ import {
   Check, 
   Download, 
   AlertTriangle, 
-  FileCheck, 
   Sparkles,
   ShieldAlert,
-  Info
+  Info,
+  Key,
+  Copy,
+  Mail,
+  Crown,
+  Laptop,
+  ExternalLink,
+  ChevronDown,
+  ChevronUp,
+  Zap,
+  Trash2,
+  RefreshCw,
+  Layers,
+  FileCheck,
+  X,
+  Users,
+  Building2
 } from 'lucide-react';
 import { 
   ServiceQueue, 
@@ -21,8 +36,25 @@ import {
   WorkshopProfile, 
   RolePermissionConfig, 
   BranchItem,
-  UserSession
+  UserSession,
+  DamagedGood,
+  ProcurementRecord,
+  MarketingCampaign,
+  PromoVoucher,
+  ExpenseItem,
+  SubscriptionState,
+  ProDurationOption,
+  ProTierOption
 } from '../../types';
+import { 
+  getOrCreateDeviceId, 
+  buildMailtoRequest, 
+  DEVELOPER_EMAIL, 
+  APP_VERSION, 
+  checkAndMigrateAppData,
+  PRO_TIERS,
+  calculateTierPrice
+} from '../../utils/licenseManager';
 
 interface SettingViewProps {
   initialTab?: string;
@@ -31,13 +63,21 @@ interface SettingViewProps {
   spareparts: Sparepart[];
   transactions: Transaction[];
   customers: CustomerVehicle[];
+  damagedGoods?: DamagedGood[];
+  procurements?: ProcurementRecord[];
+  campaigns?: MarketingCampaign[];
+  vouchers?: PromoVoucher[];
+  expenses?: ExpenseItem[];
   profile: WorkshopProfile;
   permissions: RolePermissionConfig[];
   branches: BranchItem[];
   onRestoreData: (backupData: any) => void;
-  onResetData: (mode: 'daily' | 'factory') => void;
+  onResetData: (mode: 'daily' | 'factory' | 'clean_slate') => void;
   userSession?: UserSession | null;
   onLogout?: () => void;
+  subscription?: SubscriptionState;
+  onActivateSerialKey?: (serialKey: string) => { success: boolean; message: string };
+  onReloadDemoData?: () => void;
 }
 
 export const SettingView: React.FC<SettingViewProps> = ({
@@ -47,13 +87,21 @@ export const SettingView: React.FC<SettingViewProps> = ({
   spareparts,
   transactions,
   customers,
+  damagedGoods = [],
+  procurements = [],
+  campaigns = [],
+  vouchers = [],
+  expenses = [],
   profile,
   permissions,
   branches,
   onRestoreData,
   onResetData,
   userSession,
-  onLogout
+  onLogout,
+  subscription,
+  onActivateSerialKey,
+  onReloadDemoData
 }) => {
   const [activeTab, setActiveTab] = useState<string>(initialTab);
 
@@ -69,6 +117,11 @@ export const SettingView: React.FC<SettingViewProps> = ({
     spareparts: true,
     transactions: true,
     customers: true,
+    damagedGoods: true,
+    procurements: true,
+    campaigns: true,
+    vouchers: true,
+    expenses: true,
     profile: true,
     permissions: true,
     branches: true
@@ -81,10 +134,22 @@ export const SettingView: React.FC<SettingViewProps> = ({
   const [restoreError, setRestoreError] = useState<string | null>(null);
   const [restoreSuccess, setRestoreSuccess] = useState(false);
 
-  // 4. Reset State
+  // 4. Reset State (Clean slate vs demo vs daily)
   const [resetConfirmationText, setResetConfirmationText] = useState('');
-  const [resetModalMode, setResetModalMode] = useState<'daily' | 'factory' | null>(null);
+  const [resetModalMode, setResetModalMode] = useState<'daily' | 'factory' | 'clean_slate' | null>(null);
   const [resetSuccessNotice, setResetSuccessNotice] = useState<string | null>(null);
+
+  // 5. Activation State (Tier & Durasi)
+  const deviceId = subscription?.deviceId || getOrCreateDeviceId();
+  const [selectedTier, setSelectedTier] = useState<ProTierOption>('core');
+  const [selectedDuration, setSelectedDuration] = useState<ProDurationOption>(1);
+  const [inputSerial, setInputSerial] = useState('');
+  const [activationResult, setActivationResult] = useState<{ success: boolean; message: string } | null>(null);
+  const [copiedDeviceId, setCopiedDeviceId] = useState(false);
+  const [copiedEmailText, setCopiedEmailText] = useState(false);
+
+  // 6. Update App State
+  const [migrationStatus, setMigrationStatus] = useState<{ checked: boolean; msg: string } | null>(null);
 
   // Theme Choices
   const THEMES = [
@@ -118,6 +183,47 @@ export const SettingView: React.FC<SettingViewProps> = ({
     }
   ];
 
+  const DURATION_OPTIONS: {
+    months: ProDurationOption;
+    days: number;
+    label: string;
+    sublabel: string;
+    badge?: string;
+    priceEstimate: string;
+  }[] = [
+    {
+      months: 1,
+      days: 30,
+      label: '1 Bulan',
+      sublabel: '30 Hari Operasional',
+      priceEstimate: 'Rp 30.000'
+    },
+    {
+      months: 3,
+      days: 90,
+      label: '3 Bulan',
+      sublabel: '90 Hari (Kuartal)',
+      badge: 'Hemat 5%',
+      priceEstimate: 'Rp 85.000'
+    },
+    {
+      months: 6,
+      days: 180,
+      label: '6 Bulan',
+      sublabel: '180 Hari (Semester)',
+      badge: 'Populer',
+      priceEstimate: 'Rp 160.000'
+    },
+    {
+      months: 12,
+      days: 365,
+      label: '12 Bulan',
+      sublabel: '1 Tahun Penuh',
+      badge: 'Paling Hemat',
+      priceEstimate: 'Rp 300.000'
+    }
+  ];
+
   const handleApplyTheme = (themeId: any) => {
     setSelectedTheme(themeId);
     localStorage.setItem('bq_theme', themeId);
@@ -127,9 +233,19 @@ export const SettingView: React.FC<SettingViewProps> = ({
 
   const handleDownloadBackup = () => {
     const backupPayload: any = {
-      app: 'Bengkel Qu 1.60',
+      app: 'Bengkel Qu POS',
       timestamp: new Date().toISOString(),
-      version: '1.60.0',
+      version: APP_VERSION,
+      deviceId,
+      subscription,
+      summary: {
+        queuesCount: queues.length,
+        sparepartsCount: spareparts.length,
+        transactionsCount: transactions.length,
+        customersCount: customers.length,
+        damagedGoodsCount: damagedGoods.length,
+        procurementsCount: procurements.length
+      },
       data: {}
     };
 
@@ -137,13 +253,19 @@ export const SettingView: React.FC<SettingViewProps> = ({
     if (backupOptions.spareparts) backupPayload.data.spareparts = spareparts;
     if (backupOptions.transactions) backupPayload.data.transactions = transactions;
     if (backupOptions.customers) backupPayload.data.customers = customers;
+    if (backupOptions.damagedGoods) backupPayload.data.damagedGoods = damagedGoods;
+    if (backupOptions.procurements) backupPayload.data.procurements = procurements;
+    if (backupOptions.campaigns) backupPayload.data.campaigns = campaigns;
+    if (backupOptions.vouchers) backupPayload.data.vouchers = vouchers;
+    if (backupOptions.expenses) backupPayload.data.expenses = expenses;
     if (backupOptions.profile) backupPayload.data.profile = profile;
     if (backupOptions.permissions) backupPayload.data.permissions = permissions;
     if (backupOptions.branches) backupPayload.data.branches = branches;
 
     const dataStr = 'data:text/json;charset=utf-8,' + encodeURIComponent(JSON.stringify(backupPayload, null, 2));
     const downloadAnchor = document.createElement('a');
-    const dateFormatted = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+    const now = new Date();
+    const dateFormatted = `${now.getFullYear()}${(now.getMonth() + 1).toString().padStart(2, '0')}${now.getDate().toString().padStart(2, '0')}_${now.getHours().toString().padStart(2, '0')}${now.getMinutes().toString().padStart(2, '0')}`;
     downloadAnchor.setAttribute('href', dataStr);
     downloadAnchor.setAttribute('download', `bengkelqu_backup_${dateFormatted}.json`);
     document.body.appendChild(downloadAnchor);
@@ -166,11 +288,11 @@ export const SettingView: React.FC<SettingViewProps> = ({
       try {
         const parsed = JSON.parse(event.target?.result as string);
         if (!parsed.data && !parsed.queues) {
-          throw new Error('Format file tidak sesuai dengan skema Bengkel Qu');
+          throw new Error('Format berkas tidak sesuai dengan skema data cadangan Bengkel Qu.');
         }
         setRestorePreview(parsed.data || parsed);
       } catch (err: any) {
-        setRestoreError(err.message || 'Gagal membaca berkas JSON');
+        setRestoreError(err.message || 'Gagal membaca berkas JSON.');
         setRestorePreview(null);
       }
     };
@@ -189,45 +311,88 @@ export const SettingView: React.FC<SettingViewProps> = ({
   };
 
   const handleExecuteReset = () => {
-    if (resetConfirmationText.toUpperCase() !== 'RESET') return;
+    const cleanWord = resetConfirmationText.trim().toUpperCase();
+    if (cleanWord !== 'RESET' && cleanWord !== 'HAPUS') return;
+
     if (resetModalMode) {
       onResetData(resetModalMode);
-      setResetSuccessNotice(
-        resetModalMode === 'daily'
-          ? 'Antrian & Transaksi harian berhasil dibersihkan!'
-          : 'Semua data telah direset ke setelan awal pabrik.'
-      );
+      if (resetModalMode === 'clean_slate') {
+        setResetSuccessNotice('Semua data operasional berhasil dihapus bersih total tanpa tersisa!');
+      } else if (resetModalMode === 'factory') {
+        setResetSuccessNotice('Data sampel / demo pabrik berhasil dimuat ulang!');
+      } else {
+        setResetSuccessNotice('Antrian & transaksi shift hari ini berhasil dibersihkan!');
+      }
+
       setResetModalMode(null);
       setResetConfirmationText('');
-      setTimeout(() => setResetSuccessNotice(null), 3000);
+      setTimeout(() => setResetSuccessNotice(null), 3500);
     }
+  };
+
+  const handleCopyDeviceId = () => {
+    navigator.clipboard.writeText(deviceId);
+    setCopiedDeviceId(true);
+    setTimeout(() => setCopiedDeviceId(false), 2000);
+  };
+
+  const handleCopyEmailText = () => {
+    const tierMeta = PRO_TIERS[selectedTier];
+    const priceInfo = calculateTierPrice(selectedTier, selectedDuration);
+    const text = `Kepada: ${DEVELOPER_EMAIL}\nPerihal: Permintaan Serial Number [${tierMeta.name}] [${selectedDuration} Bulan] - ${deviceId}\n\n• Device ID: ${deviceId}\n• Paket: ${tierMeta.name} (${tierMeta.rateLabel})\n• Durasi: ${selectedDuration} Bulan (${priceInfo.days} Hari)\n• Total: ${priceInfo.formattedPrice}\n• Nama Bengkel: ${profile.workshopName}\n• Kontak / WA: ${profile.phone}\n\nMohon dikirimkan Serial Number aktivasi PRO. Terima kasih!`;
+    navigator.clipboard.writeText(text);
+    setCopiedEmailText(true);
+    setTimeout(() => setCopiedEmailText(false), 2000);
+  };
+
+  const handleDoActivate = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!inputSerial.trim()) {
+      setActivationResult({ success: false, message: 'Masukkan kode Serial Number terlebih dahulu.' });
+      return;
+    }
+    if (onActivateSerialKey) {
+      const res = onActivateSerialKey(inputSerial.trim());
+      setActivationResult(res);
+    }
+  };
+
+  const handleRunMigrationCheck = () => {
+    const info = checkAndMigrateAppData();
+    setMigrationStatus({
+      checked: true,
+      msg: `Pengecekan versi ${info.currentVersion} berhasil. Skema data tersinkronisasi 100% aman dan kompatibel!`
+    });
+    setTimeout(() => setMigrationStatus(null), 3500);
   };
 
   return (
     <div className="flex-1 bg-slate-50 flex flex-col">
       {/* Top Header */}
-      <div className="bg-[#008952] text-white px-5 pt-4 pb-6 shadow-md">
+      <div className="bg-[#008952] text-white px-5 pt-4 pb-5 shadow-md">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
             <button
               onClick={onBack}
               aria-label="Kembali"
-              className="w-10 h-10 rounded-full bg-white/15 active:bg-white/30 flex items-center justify-center transition-colors shadow-sm"
+              className="w-10 h-10 rounded-full bg-white/15 active:bg-white/30 flex items-center justify-center transition-colors shadow-sm cursor-pointer"
             >
               <ArrowLeft className="w-5 h-5 text-white" />
             </button>
             <div>
               <h1 className="text-xl font-bold tracking-tight">Setting Bengkel Qu</h1>
-              <p className="text-xs text-emerald-100 font-medium">Tema, Backup, Restore & Reset</p>
+              <p className="text-xs text-emerald-100 font-medium">
+                Tema, Backup, Restore, Reset & Aktivasi Lisensi
+              </p>
             </div>
           </div>
         </div>
 
-        {/* Tab Switcher Horizontal */}
+        {/* Tab Switcher Horizontal (Scrollable for compact touch) */}
         <div className="flex items-center gap-1.5 mt-4 bg-emerald-800/50 p-1 rounded-xl text-xs overflow-x-auto scrollbar-none">
           <button
             onClick={() => setActiveTab('setting-tema')}
-            className={`flex-1 min-w-[70px] py-1.5 px-2 rounded-lg font-bold transition-all text-center ${
+            className={`flex-1 min-w-[65px] py-1.5 px-2 rounded-lg font-bold transition-all text-center cursor-pointer whitespace-nowrap ${
               activeTab === 'setting-tema' ? 'bg-white text-[#008952] shadow-xs' : 'text-emerald-100'
             }`}
           >
@@ -235,15 +400,15 @@ export const SettingView: React.FC<SettingViewProps> = ({
           </button>
           <button
             onClick={() => setActiveTab('setting-backup')}
-            className={`flex-1 min-w-[85px] py-1.5 px-2 rounded-lg font-bold transition-all text-center ${
+            className={`flex-1 min-w-[70px] py-1.5 px-2 rounded-lg font-bold transition-all text-center cursor-pointer whitespace-nowrap ${
               activeTab === 'setting-backup' ? 'bg-white text-[#008952] shadow-xs' : 'text-emerald-100'
             }`}
           >
-            Backup - Opsi
+            Backup
           </button>
           <button
             onClick={() => setActiveTab('setting-restore')}
-            className={`flex-1 min-w-[75px] py-1.5 px-2 rounded-lg font-bold transition-all text-center ${
+            className={`flex-1 min-w-[70px] py-1.5 px-2 rounded-lg font-bold transition-all text-center cursor-pointer whitespace-nowrap ${
               activeTab === 'setting-restore' ? 'bg-white text-[#008952] shadow-xs' : 'text-emerald-100'
             }`}
           >
@@ -251,17 +416,34 @@ export const SettingView: React.FC<SettingViewProps> = ({
           </button>
           <button
             onClick={() => setActiveTab('setting-reset')}
-            className={`flex-1 min-w-[70px] py-1.5 px-2 rounded-lg font-bold transition-all text-center ${
+            className={`flex-1 min-w-[65px] py-1.5 px-2 rounded-lg font-bold transition-all text-center cursor-pointer whitespace-nowrap ${
               activeTab === 'setting-reset' ? 'bg-white text-rose-600 shadow-xs' : 'text-emerald-100'
             }`}
           >
             Reset
+          </button>
+          <button
+            onClick={() => setActiveTab('setting-aktivasi')}
+            className={`flex-1 min-w-[90px] py-1.5 px-2 rounded-lg font-bold transition-all text-center cursor-pointer whitespace-nowrap ${
+              activeTab === 'setting-aktivasi' ? 'bg-white text-[#008952] shadow-xs' : 'text-emerald-100'
+            }`}
+          >
+            Aktivasi PRO
+          </button>
+          <button
+            onClick={() => setActiveTab('setting-update')}
+            className={`flex-1 min-w-[85px] py-1.5 px-2 rounded-lg font-bold transition-all text-center cursor-pointer whitespace-nowrap ${
+              activeTab === 'setting-update' ? 'bg-white text-[#008952] shadow-xs' : 'text-emerald-100'
+            }`}
+          >
+            Update App
           </button>
         </div>
       </div>
 
       {/* Main Tab Content */}
       <div className="flex-1 p-4 space-y-4 overflow-y-auto">
+        
         {/* ================= TAB 1: TEMA ================= */}
         {activeTab === 'setting-tema' && (
           <div className="space-y-3 animate-in fade-in">
@@ -321,92 +503,72 @@ export const SettingView: React.FC<SettingViewProps> = ({
           </div>
         )}
 
-        {/* ================= TAB 2: BACKUP - OPSI ================= */}
+        {/* ================= TAB 2: BACKUP ================= */}
         {activeTab === 'setting-backup' && (
           <div className="space-y-3 animate-in fade-in">
             <div className="bg-white rounded-2xl p-4 shadow-xs border border-slate-100">
               <div className="flex items-center gap-2 mb-1">
                 <Database className="w-4 h-4 text-[#008952]" />
-                <h3 className="font-bold text-slate-900 text-sm">Opsi Pencadangan Data (Backup)</h3>
+                <h3 className="font-bold text-slate-900 text-sm">Pencadangan Data (Backup .JSON)</h3>
               </div>
-              <p className="text-xs text-slate-500">
-                Pilih modul data yang ingin disertakan ke dalam berkas cadangan (.JSON).
+              <p className="text-xs text-slate-500 leading-relaxed">
+                Unduh berkas cadangan komprehensif berisi seluruh riwayat antrian, katalog sparepart, transaksi kasir, pelanggan, barang rusak, pengadaan, dan pengaturan.
               </p>
             </div>
 
             {backupDownloaded && (
               <div className="p-3 bg-emerald-100 border border-emerald-300 text-[#008952] rounded-2xl text-xs font-bold flex items-center gap-2">
                 <Check className="w-4 h-4" />
-                <span>Berkas backup berhasil dibuat dan diunduh ke perangkat Anda!</span>
+                <span>Berkas cadangan berhasil diunduh ke perangkat Anda!</span>
               </div>
             )}
 
-            {/* Checkbox Options Card */}
+            {/* Checklist Modul yang Dicadangkan */}
             <div className="bg-white rounded-2xl p-4 shadow-xs border border-slate-100 space-y-3">
-              <div className="flex items-center justify-between pb-2 border-b border-slate-100 text-xs">
-                <span className="font-bold text-slate-800">Daftar Modul untuk Dicadangkan:</span>
-                <button
-                  type="button"
-                  onClick={() =>
-                    setBackupOptions({
-                      queues: true,
-                      spareparts: true,
-                      transactions: true,
-                      customers: true,
-                      profile: true,
-                      permissions: true,
-                      branches: true
-                    })
-                  }
-                  className="text-[11px] font-semibold text-[#008952] hover:underline"
-                >
-                  Pilih Semua
-                </button>
+              <div className="flex items-center justify-between pb-2 border-b border-slate-100">
+                <span className="font-bold text-xs text-slate-800">Pilih Data yang Disertakan:</span>
+                <span className="text-[10px] text-slate-400">Centang sesuai kebutuhan</span>
               </div>
 
-              {[
-                { key: 'queues', label: 'Antrian Servis & Pengerjaan', count: `${queues.length} Unit` },
-                { key: 'spareparts', label: 'Inventaris & Stok Sparepart', count: `${spareparts.length} Item` },
-                { key: 'transactions', label: 'Riwayat Transaksi & Nota Kasir', count: `${transactions.length} Faktur` },
-                { key: 'customers', label: 'Database Pelanggan & Kendaraan', count: `${customers.length} Orang` },
-                { key: 'profile', label: 'Profil Resmi Bengkel & Pemilik', count: '1 Profil' },
-                { key: 'permissions', label: 'Hak Akses Otoritas SPV & Kasir', count: `${permissions.length} Izin` },
-                { key: 'branches', label: 'Manajemen Multi Cabang', count: `${branches.length} Cabang` }
-              ].map((opt) => (
-                <label
-                  key={opt.key}
-                  className="flex items-center justify-between p-2 rounded-xl hover:bg-slate-50 cursor-pointer transition-colors text-xs"
-                >
-                  <div className="flex items-center gap-2.5">
+              <div className="grid grid-cols-2 gap-2 text-xs">
+                {[
+                  { key: 'queues', label: `Antrian Servis (${queues.length})` },
+                  { key: 'spareparts', label: `Katalog Part (${spareparts.length})` },
+                  { key: 'transactions', label: `Transaksi Kasir (${transactions.length})` },
+                  { key: 'customers', label: `Data CRM Pelanggan (${customers.length})` },
+                  { key: 'damagedGoods', label: `Barang Rusak (${damagedGoods.length})` },
+                  { key: 'procurements', label: `Pengadaan Suku Cadang (${procurements.length})` },
+                  { key: 'expenses', label: `Kas Kecil Operasional (${expenses.length})` },
+                  { key: 'profile', label: 'Profil & Identitas Bengkel' },
+                  { key: 'permissions', label: 'Matriks Otorisasi Hak Akses' },
+                  { key: 'branches', label: 'Data Cabang Bengkel' }
+                ].map((item) => (
+                  <label key={item.key} className="flex items-center gap-2 text-slate-700 cursor-pointer">
                     <input
                       type="checkbox"
-                      checked={(backupOptions as any)[opt.key]}
+                      checked={(backupOptions as any)[item.key]}
                       onChange={(e) =>
                         setBackupOptions({
                           ...backupOptions,
-                          [opt.key]: e.target.checked
+                          [item.key]: e.target.checked
                         })
                       }
-                      className="w-4 h-4 text-[#008952] rounded border-slate-300 focus:ring-emerald-500"
+                      className="rounded text-[#008952] focus:ring-emerald-500 w-4 h-4 cursor-pointer"
                     />
-                    <span className="font-semibold text-slate-800">{opt.label}</span>
-                  </div>
-                  <span className="text-[10px] px-2 py-0.5 rounded-md bg-slate-100 font-bold text-slate-500">
-                    {opt.count}
-                  </span>
-                </label>
-              ))}
-
-              <div className="pt-2">
-                <button
-                  onClick={handleDownloadBackup}
-                  className="w-full bg-[#008952] hover:bg-emerald-700 active:scale-98 text-white font-bold py-3.5 rounded-2xl shadow-md shadow-emerald-700/20 text-xs flex items-center justify-center gap-2 transition-all cursor-pointer"
-                >
-                  <Download className="w-4 h-4 stroke-[2.3]" />
-                  <span>Unduh File Cadangan (.JSON)</span>
-                </button>
+                    <span className="text-[11px] font-medium">{item.label}</span>
+                  </label>
+                ))}
               </div>
             </div>
+
+            <button
+              type="button"
+              onClick={handleDownloadBackup}
+              className="w-full bg-[#008952] hover:bg-emerald-700 active:scale-95 text-white font-bold py-3 px-4 rounded-2xl text-xs flex items-center justify-center gap-2 shadow-md shadow-emerald-700/20 transition-all cursor-pointer"
+            >
+              <Download className="w-4 h-4" />
+              <span>Ekspor & Unduh Berkas Cadangan (.JSON)</span>
+            </button>
           </div>
         )}
 
@@ -416,86 +578,99 @@ export const SettingView: React.FC<SettingViewProps> = ({
             <div className="bg-white rounded-2xl p-4 shadow-xs border border-slate-100">
               <div className="flex items-center gap-2 mb-1">
                 <UploadCloud className="w-4 h-4 text-[#008952]" />
-                <h3 className="font-bold text-slate-900 text-sm">Pemulihan Data (Restore)</h3>
+                <h3 className="font-bold text-slate-900 text-sm">Pemulihan Data (Restore .JSON)</h3>
               </div>
-              <p className="text-xs text-slate-500">
-                Pilih atau unggah berkas backup JSON Bengkel Qu untuk memulihkan data.
+              <p className="text-xs text-slate-500 leading-relaxed">
+                Pulihkan data bengkel dari berkas JSON hasil ekspor cadangan sebelumnya. Data baru akan otomatis menggantikan atau menyinkronkan data aktif.
               </p>
             </div>
 
             {restoreSuccess && (
               <div className="p-3 bg-emerald-100 border border-emerald-300 text-[#008952] rounded-2xl text-xs font-bold flex items-center gap-2">
                 <Check className="w-4 h-4" />
-                <span>Seluruh data berhasil dipulihkan dari berkas cadangan!</span>
+                <span>Seluruh data cadangan berhasil dipulihkan dan disinkronkan!</span>
               </div>
             )}
 
             {restoreError && (
-              <div className="p-3 bg-rose-100 border border-rose-300 text-rose-700 rounded-2xl text-xs font-bold flex items-center gap-2">
+              <div className="p-3 bg-rose-100 border border-rose-300 text-rose-800 rounded-2xl text-xs font-bold flex items-center gap-2">
                 <AlertTriangle className="w-4 h-4" />
                 <span>{restoreError}</span>
               </div>
             )}
 
-            <div className="bg-white rounded-2xl p-5 shadow-xs border border-slate-100 space-y-4">
-              {/* File Input Box */}
-              <div className="border-2 border-dashed border-emerald-300 hover:border-emerald-500 rounded-2xl p-6 text-center bg-emerald-50/30 transition-all cursor-pointer relative">
-                <input
-                  type="file"
-                  accept=".json"
-                  onChange={handleFileChange}
-                  className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
-                />
-                <UploadCloud className="w-10 h-10 text-[#008952] mx-auto mb-2" />
-                <h4 className="font-bold text-slate-800 text-xs">
-                  {restoreFile ? restoreFile.name : 'Pilih Berkas Backup (.JSON)'}
-                </h4>
-                <p className="text-[11px] text-slate-400 mt-0.5">
-                  Klik di sini untuk menelusuri berkas dari perangkat
-                </p>
+            {/* Upload Area */}
+            <div className="bg-white rounded-2xl p-5 shadow-xs border-2 border-dashed border-slate-200 text-center space-y-3">
+              <div className="w-12 h-12 bg-emerald-50 text-[#008952] rounded-full flex items-center justify-center mx-auto">
+                <UploadCloud className="w-6 h-6" />
+              </div>
+              <div>
+                <span className="font-bold text-xs text-slate-800 block">
+                  Pilih Berkas Cadangan Bengkel Qu (.JSON)
+                </span>
+                <span className="text-[11px] text-slate-400 mt-0.5 block">
+                  Format berkas: bengkelqu_backup_*.json
+                </span>
               </div>
 
-              {/* Preview of file content */}
-              {restorePreview && (
-                <div className="bg-slate-50 rounded-2xl p-3 border border-slate-200 text-xs space-y-2">
-                  <div className="flex items-center gap-1.5 font-bold text-slate-800 text-[11px] uppercase tracking-wider">
-                    <FileCheck className="w-4 h-4 text-[#008952]" />
-                    <span>Isi Data Cadangan Terdeteksi:</span>
-                  </div>
-                  <div className="grid grid-cols-2 gap-1.5 text-[11px] text-slate-600">
-                    <div>• Antrian: {restorePreview.queues?.length || 0} unit</div>
-                    <div>• Sparepart: {restorePreview.spareparts?.length || 0} item</div>
-                    <div>• Transaksi: {restorePreview.transactions?.length || 0} nota</div>
-                    <div>• Pelanggan: {restorePreview.customers?.length || 0} data</div>
-                    <div>• Cabang: {restorePreview.branches?.length || 0} outlet</div>
-                    <div>• Hak Akses: {restorePreview.permissions?.length || 0} izin</div>
-                  </div>
+              <input
+                type="file"
+                accept=".json"
+                onChange={handleFileChange}
+                className="block w-full text-xs text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-emerald-50 file:text-[#008952] hover:file:bg-emerald-100 cursor-pointer"
+              />
+            </div>
 
-                  <div className="pt-2">
-                    <button
-                      onClick={handleExecuteRestore}
-                      className="w-full bg-[#008952] hover:bg-emerald-700 active:scale-98 text-white font-bold py-3 rounded-xl text-xs flex items-center justify-center gap-1.5 shadow-md shadow-emerald-700/20 cursor-pointer"
-                    >
-                      <Check className="w-4 h-4 stroke-[2.5]" />
-                      <span>Terapkan Pemulihan Database Sekarang</span>
-                    </button>
+            {/* Preview Restore */}
+            {restorePreview && (
+              <div className="bg-white rounded-2xl p-4 shadow-xs border border-emerald-300 space-y-3">
+                <div className="flex items-center gap-2 pb-2 border-b border-slate-100 text-[#008952]">
+                  <FileCheck className="w-4 h-4" />
+                  <span className="font-bold text-xs">Pratinjau Data yang Ditemukan</span>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2 text-xs">
+                  <div className="bg-slate-50 p-2 rounded-xl">
+                    <span className="text-[10px] text-slate-400 block">Antrian Servis</span>
+                    <span className="font-bold text-slate-800">{restorePreview.queues?.length || 0} Tiket</span>
+                  </div>
+                  <div className="bg-slate-50 p-2 rounded-xl">
+                    <span className="text-[10px] text-slate-400 block">Suku Cadang / Stok</span>
+                    <span className="font-bold text-slate-800">{restorePreview.spareparts?.length || 0} Item</span>
+                  </div>
+                  <div className="bg-slate-50 p-2 rounded-xl">
+                    <span className="text-[10px] text-slate-400 block">Transaksi Kasir</span>
+                    <span className="font-bold text-slate-800">{restorePreview.transactions?.length || 0} Nota</span>
+                  </div>
+                  <div className="bg-slate-50 p-2 rounded-xl">
+                    <span className="text-[10px] text-slate-400 block">Pelanggan CRM</span>
+                    <span className="font-bold text-slate-800">{restorePreview.customers?.length || 0} Unit</span>
                   </div>
                 </div>
-              )}
-            </div>
+
+                <button
+                  type="button"
+                  onClick={handleExecuteRestore}
+                  className="w-full bg-[#008952] hover:bg-emerald-700 text-white font-bold py-2.5 px-4 rounded-xl text-xs flex items-center justify-center gap-1.5 shadow-sm transition-all cursor-pointer"
+                >
+                  <Check className="w-4 h-4" />
+                  <span>Terapkan Pemulihan Sekarang</span>
+                </button>
+              </div>
+            )}
           </div>
         )}
 
-        {/* ================= TAB 4: RESET ================= */}
+        {/* ================= TAB 4: RESET (PASTIKAN HAPUS BERSIH TIDAK TERSISA) ================= */}
         {activeTab === 'setting-reset' && (
           <div className="space-y-3 animate-in fade-in">
             <div className="bg-white rounded-2xl p-4 shadow-xs border border-slate-100">
               <div className="flex items-center gap-2 mb-1">
                 <RotateCcw className="w-4 h-4 text-rose-600" />
-                <h3 className="font-bold text-slate-900 text-sm">Reset & Pembersihan Data</h3>
+                <h3 className="font-bold text-slate-900 text-sm">Pusat Reset & Penghapusan Data</h3>
               </div>
-              <p className="text-xs text-slate-500">
-                Opsi pembersihan data operasional harian atau pengembalian menyeluruh ke setelan demo awal pabrik.
+              <p className="text-xs text-slate-500 leading-relaxed">
+                Pilih opsi di bawah untuk mengosongkan seluruh data operasional tanpa tersisa, atau memuat ulang data demo/sampel untuk pelatihan tim bengkel.
               </p>
             </div>
 
@@ -506,83 +681,85 @@ export const SettingView: React.FC<SettingViewProps> = ({
               </div>
             )}
 
-            {/* Opsi 1: Reset Harian */}
-            <div className="bg-white rounded-2xl p-4 shadow-xs border border-slate-100 space-y-2">
+            {/* OPSI UTAMA 1: HAPUS BERSIH TOTAL (TIDAK TERSISA SAMA SEKALI) */}
+            <div className="bg-rose-50/50 border-2 border-rose-300 rounded-2xl p-4 shadow-xs space-y-2.5">
               <div className="flex items-start justify-between">
                 <div>
-                  <h4 className="font-bold text-slate-900 text-xs">Bersihkan Shift & Transaksi Hari Ini</h4>
-                  <p className="text-[11px] text-slate-500 mt-0.5">
-                    Menghapus antrian yang selesai dan riwayat transaksi shift hari ini tanpa menghapus stok barang.
+                  <div className="flex items-center gap-1.5 text-rose-700 font-extrabold text-xs">
+                    <Trash2 className="w-4 h-4" />
+                    <span>Hapus Bersih Total (Kosongkan Data - Tidak Ada Tersisa)</span>
+                  </div>
+                  <p className="text-[11px] text-slate-600 mt-1 leading-relaxed">
+                    Menghapus seluruh antrian servis, riwayat kasir, suku cadang, pelanggan CRM, log barang rusak, dan kas kecil menjadi <strong>0 data (kosong total)</strong>. Cocok untuk bengkel baru yang siap mulai operasional nyata dari awal.
                   </p>
                 </div>
               </div>
               <button
                 type="button"
-                onClick={() => setResetModalMode('daily')}
-                className="bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-300 font-bold px-3 py-2 rounded-xl text-xs active:scale-95 transition-all cursor-pointer mt-1"
+                onClick={() => setResetModalMode('clean_slate')}
+                className="bg-rose-600 hover:bg-rose-700 text-white font-extrabold px-4 py-2.5 rounded-xl text-xs active:scale-95 shadow-md shadow-rose-700/20 transition-all cursor-pointer flex items-center gap-1.5"
               >
-                Bersihkan Shift Hari Ini
+                <Trash2 className="w-3.5 h-3.5" />
+                <span>Hapus Bersih Total (0 Data Tersisa)</span>
               </button>
             </div>
 
-            {/* Opsi 2: Reset Total Pabrik */}
-            <div className="bg-white rounded-2xl p-4 shadow-xs border border-rose-200 space-y-2 bg-rose-50/20">
+            {/* OPSI 2: Muat Ulang Data Sampel / Demo Pabrik */}
+            <div className="bg-white rounded-2xl p-4 shadow-xs border border-emerald-200 space-y-2">
               <div className="flex items-start justify-between">
                 <div>
-                  <div className="flex items-center gap-1.5 text-rose-700 font-bold text-xs">
-                    <ShieldAlert className="w-4 h-4" />
-                    <span>Reset Total ke Setelan Pabrik</span>
+                  <div className="flex items-center gap-1.5 text-[#008952] font-bold text-xs">
+                    <RefreshCw className="w-4 h-4" />
+                    <span>Muat Ulang Data Sampel / Demo Pabrik</span>
                   </div>
                   <p className="text-[11px] text-slate-500 mt-0.5">
-                    Mengembalikan seluruh antrian, sparepart, cabang, dan profil ke data awal standar pabrik.
+                    Mengisi kembali data contoh motor matic, katalog oli & sparepart, serta transaksi kasir untuk latihan/simulasi tim kasir dan mekanik.
                   </p>
                 </div>
               </div>
               <button
                 type="button"
                 onClick={() => setResetModalMode('factory')}
-                className="bg-rose-600 hover:bg-rose-700 text-white font-bold px-4 py-2 rounded-xl text-xs active:scale-95 shadow-xs transition-all cursor-pointer mt-1"
+                className="bg-emerald-50 hover:bg-emerald-100 text-[#008952] border border-emerald-300 font-bold px-3 py-2 rounded-xl text-xs active:scale-95 transition-all cursor-pointer flex items-center gap-1.5"
               >
-                Reset Total ke Setelan Pabrik
+                <RefreshCw className="w-3.5 h-3.5" />
+                <span>Muat Ulang Data Demo Pabrik</span>
               </button>
             </div>
 
-            {/* Opsi 3: Akun Google & Logout */}
+            {/* OPSI 3: Bersihkan Shift Hari Ini Saja */}
+            <div className="bg-white rounded-2xl p-4 shadow-xs border border-slate-100 space-y-2">
+              <div className="flex items-start justify-between">
+                <div>
+                  <h4 className="font-bold text-slate-900 text-xs">Bersihkan Shift & Transaksi Selesai Hari Ini</h4>
+                  <p className="text-[11px] text-slate-500 mt-0.5">
+                    Menghapus antrian yang selesai dan riwayat transaksi hari ini tanpa menghapus katalog barang dan data pelanggan.
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setResetModalMode('daily')}
+                className="bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-300 font-bold px-3 py-2 rounded-xl text-xs active:scale-95 transition-all cursor-pointer"
+              >
+                Bersihkan Shift Hari Ini Saja
+              </button>
+            </div>
+
+            {/* Info Akun Google */}
             {userSession && (
               <div className="bg-white rounded-2xl p-4 shadow-xs border border-slate-100 space-y-3">
-                <div className="flex items-center justify-between pb-2 border-b border-slate-100">
-                  <div className="flex items-center gap-2">
-                    <svg className="w-4 h-4" viewBox="0 0 24 24">
-                      <path
-                        fill="#4285F4"
-                        d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
-                      />
-                      <path
-                        fill="#34A853"
-                        d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
-                      />
-                      <path
-                        fill="#FBBC05"
-                        d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"
-                      />
-                      <path
-                        fill="#EA4335"
-                        d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"
-                      />
-                    </svg>
-                    <span className="font-bold text-xs text-slate-800">Akun Google Terhubung</span>
-                  </div>
+                <div className="flex items-center justify-between pb-2 border-b border-slate-100 text-xs">
+                  <span className="font-bold text-slate-800">Akun Google Terhubung</span>
                   <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full">
                     {userSession.role}
                   </span>
                 </div>
-
                 <div className="flex items-center justify-between text-xs">
                   <div>
                     <span className="font-bold text-slate-900 block">{userSession.name}</span>
                     <span className="text-[11px] text-slate-500 font-mono">{userSession.email}</span>
                   </div>
-
                   {onLogout && (
                     <button
                       type="button"
@@ -597,22 +774,375 @@ export const SettingView: React.FC<SettingViewProps> = ({
             )}
           </div>
         )}
+
+        {/* ================= TAB 5: AKTIVASI PRO ================= */}
+        {activeTab === 'setting-aktivasi' && (
+          <div className="space-y-4 animate-in fade-in">
+            {/* Header info */}
+            <div className="bg-white rounded-2xl p-4 shadow-xs border border-slate-100 space-y-2">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Crown className="w-5 h-5 text-amber-500" />
+                  <h3 className="font-bold text-slate-900 text-sm">Status Lisensi Bengkel Qu PRO</h3>
+                </div>
+                {subscription?.isSubscribed ? (
+                  <span className="px-2.5 py-1 rounded-full bg-emerald-600 text-white text-[10px] font-black">
+                    PRO AKTIF
+                  </span>
+                ) : subscription?.isTrialActive ? (
+                  <span className="px-2.5 py-1 rounded-full bg-amber-100 text-amber-900 text-[10px] font-black border border-amber-300">
+                    Trial: {subscription.trialDaysRemaining} Hari
+                  </span>
+                ) : (
+                  <span className="px-2.5 py-1 rounded-full bg-slate-100 text-slate-700 text-[10px] font-bold">
+                    Free Lifetime
+                  </span>
+                )}
+              </div>
+
+              <p className="text-xs text-slate-500 leading-relaxed">
+                Permintaan Serial Number dikirimkan langsung ke developer (<strong className="font-mono text-slate-800">{DEVELOPER_EMAIL}</strong>) berdasarkan <strong>Device ID</strong> unik perangkat ini. Developer akan memproses dan membuatkan serial number via aplikasi Termux miliknya.
+              </p>
+            </div>
+
+            {/* Device ID Card */}
+            <div className="bg-emerald-50/70 border border-emerald-300 rounded-2xl p-4 space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-emerald-950 flex items-center gap-1.5">
+                  <Laptop className="w-4 h-4 text-[#008952]" />
+                  Device ID Perangkat Ini:
+                </span>
+                <span className="text-[10px] font-semibold text-emerald-700 bg-white px-2 py-0.5 rounded-full border border-emerald-200">
+                  Kunci Unik Perangkat
+                </span>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <div className="flex-1 bg-white border border-emerald-300 rounded-xl px-3 py-2.5 font-mono text-sm font-black text-slate-800 tracking-wider">
+                  {deviceId}
+                </div>
+                <button
+                  type="button"
+                  onClick={handleCopyDeviceId}
+                  className="bg-[#008952] hover:bg-emerald-700 active:scale-95 text-white px-3.5 py-2.5 rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-xs transition-all cursor-pointer shrink-0"
+                >
+                  <Copy className="w-3.5 h-3.5" />
+                  <span>{copiedDeviceId ? 'Tersalin!' : 'Salin'}</span>
+                </button>
+              </div>
+            </div>
+
+            {/* 1. Pilihan Paket PRO (Basic 1000/hari, Core 2000/hari, Enterprise 3000/hari) */}
+            <div className="space-y-2">
+              <label className="text-xs font-bold text-slate-900 flex items-center justify-between">
+                <span>1. Pilih Paket PRO yang Diinginkan:</span>
+                <span className="text-[10px] text-emerald-700 font-bold bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
+                  Tarif Harian Terjangkau
+                </span>
+              </label>
+
+              <div className="grid grid-cols-3 gap-2">
+                {/* Basic Pro */}
+                <button
+                  type="button"
+                  onClick={() => setSelectedTier('basic')}
+                  className={`p-3 rounded-2xl border text-left transition-all cursor-pointer flex flex-col justify-between ${
+                    selectedTier === 'basic'
+                      ? 'border-blue-500 bg-blue-50/70 ring-2 ring-blue-500/30 shadow-xs'
+                      : 'border-slate-200 bg-white hover:border-blue-200'
+                  }`}
+                >
+                  <div>
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="font-extrabold text-xs text-slate-900">Basic Pro</span>
+                      <Users className="w-3.5 h-3.5 text-blue-600" />
+                    </div>
+                    <span className="text-[10px] text-slate-500 block leading-tight">Solo Mode Mandiri</span>
+                  </div>
+                  <div className="mt-2.5 pt-1.5 border-t border-slate-100">
+                    <span className="font-mono text-xs font-black text-blue-700 block">Rp 1.000</span>
+                    <span className="text-[9px] text-slate-400">per hari</span>
+                  </div>
+                </button>
+
+                {/* Core Pro */}
+                <button
+                  type="button"
+                  onClick={() => setSelectedTier('core')}
+                  className={`p-3 rounded-2xl border text-left transition-all cursor-pointer flex flex-col justify-between relative ${
+                    selectedTier === 'core'
+                      ? 'border-[#008952] bg-emerald-50/70 ring-2 ring-emerald-500/30 shadow-xs'
+                      : 'border-slate-200 bg-white hover:border-emerald-200'
+                  }`}
+                >
+                  <span className="absolute -top-2 right-2 bg-amber-400 text-amber-950 font-black text-[8px] px-1.5 py-0.2 rounded-full shadow-2xs">
+                    Populer
+                  </span>
+                  <div>
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="font-extrabold text-xs text-slate-900">Core Pro</span>
+                      <ShieldAlert className="w-3.5 h-3.5 text-[#008952]" />
+                    </div>
+                    <span className="text-[10px] text-slate-500 block leading-tight">Multi-User SPV & Kasir</span>
+                  </div>
+                  <div className="mt-2.5 pt-1.5 border-t border-slate-100">
+                    <span className="font-mono text-xs font-black text-[#008952] block">Rp 2.000</span>
+                    <span className="text-[9px] text-slate-400">per hari</span>
+                  </div>
+                </button>
+
+                {/* Enterprise Pro */}
+                <button
+                  type="button"
+                  onClick={() => setSelectedTier('corporate')}
+                  className={`p-3 rounded-2xl border text-left transition-all cursor-pointer flex flex-col justify-between ${
+                    selectedTier === 'corporate'
+                      ? 'border-purple-500 bg-purple-50/70 ring-2 ring-purple-500/30 shadow-xs'
+                      : 'border-slate-200 bg-white hover:border-purple-200'
+                  }`}
+                >
+                  <div>
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="font-extrabold text-xs text-slate-900">Enterprise</span>
+                      <Building2 className="w-3.5 h-3.5 text-purple-600" />
+                    </div>
+                    <span className="text-[10px] text-slate-500 block leading-tight">Multi-Cabang (3 Outlet)</span>
+                  </div>
+                  <div className="mt-2.5 pt-1.5 border-t border-slate-100">
+                    <span className="font-mono text-xs font-black text-purple-700 block">Rp 3.000</span>
+                    <span className="text-[9px] text-slate-400">per hari</span>
+                  </div>
+                </button>
+              </div>
+            </div>
+
+            {/* 2. Pilihan Durasi Pro 1, 3, 6, 12 Bulan */}
+            <div className="bg-white rounded-2xl p-4 shadow-xs border border-slate-100 space-y-2.5">
+              <div className="flex items-center justify-between">
+                <span className="font-bold text-xs text-slate-800">2. Pilih Durasi Langganan:</span>
+                <span className="text-[10px] text-slate-400">1, 3, 6, 12 Bulan</span>
+              </div>
+
+              <div className="grid grid-cols-4 gap-2">
+                {DURATION_OPTIONS.map((opt) => {
+                  const price = calculateTierPrice(selectedTier, opt.months);
+                  const isSelected = selectedDuration === opt.months;
+
+                  return (
+                    <button
+                      key={opt.months}
+                      type="button"
+                      onClick={() => setSelectedDuration(opt.months)}
+                      className={`p-2.5 rounded-xl border text-center transition-all cursor-pointer flex flex-col justify-between ${
+                        isSelected
+                          ? 'border-[#008952] bg-emerald-50/80 ring-2 ring-emerald-500/20 shadow-xs'
+                          : 'border-slate-200 bg-white hover:border-emerald-300'
+                      }`}
+                    >
+                      <div>
+                        <span className="font-extrabold text-xs text-slate-900 block">{opt.label}</span>
+                        <span className="text-[9px] text-slate-400 block mt-0.5">{opt.days} Hari</span>
+                      </div>
+                      <span className="text-[10px] font-black text-[#008952] font-mono mt-1.5 block">
+                        {price.formattedPrice}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* Rincian Kalkulasi Harga */}
+              {(() => {
+                const calc = calculateTierPrice(selectedTier, selectedDuration);
+                return (
+                  <div className="bg-slate-50 border border-slate-200 rounded-xl p-2.5 flex items-center justify-between text-xs">
+                    <div>
+                      <span className="text-slate-500 block text-[10px]">Rincian Paket & Durasi:</span>
+                      <span className="font-bold text-slate-900">
+                        {PRO_TIERS[selectedTier].name} ({selectedDuration} Bulan / {calc.days} Hari)
+                      </span>
+                    </div>
+                    <div className="text-right">
+                      <span className="text-slate-500 block text-[10px]">
+                        {calc.days} hari × {PRO_TIERS[selectedTier].rateLabel}
+                      </span>
+                      <span className="font-mono font-black text-sm text-[#008952]">
+                        {calc.formattedPrice}
+                      </span>
+                    </div>
+                  </div>
+                );
+              })()}
+            </div>
+
+            {/* Request Buttons ke Email Developer */}
+            <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 space-y-3">
+              <div className="flex items-center justify-between text-xs">
+                <span className="font-bold text-slate-900 flex items-center gap-1.5">
+                  <Mail className="w-4 h-4 text-[#008952]" />
+                  Kirim Permintaan ke Developer Hendri
+                </span>
+                <span className="font-mono text-[11px] text-slate-600 font-bold">{DEVELOPER_EMAIL}</span>
+              </div>
+
+              <div className="flex flex-col sm:flex-row gap-2">
+                <a
+                  href={buildMailtoRequest(deviceId, selectedTier, selectedDuration, profile.workshopName, profile.phone)}
+                  className="flex-1 bg-[#008952] hover:bg-emerald-700 text-white py-2.5 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-2 shadow-xs transition-all text-center"
+                >
+                  <Mail className="w-3.5 h-3.5" />
+                  <span>Kirim Email Permintaan Serial Number</span>
+                  <ExternalLink className="w-3 h-3 opacity-80" />
+                </a>
+
+                <button
+                  type="button"
+                  onClick={handleCopyEmailText}
+                  className="bg-white hover:bg-slate-100 border border-slate-300 text-slate-700 py-2.5 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer"
+                >
+                  <Copy className="w-3.5 h-3.5 text-slate-500" />
+                  <span>{copiedEmailText ? 'Format Disalin!' : 'Salin Format'}</span>
+                </button>
+              </div>
+
+              <p className="text-[10px] text-slate-500 leading-tight">
+                Developer (<strong>Mas Hendri</strong> di <code className="bg-slate-200/70 px-1 py-0.5 rounded font-mono text-slate-800">{DEVELOPER_EMAIL}</code>) akan membuat Serial Number aktivasi {PRO_TIERS[selectedTier].name} ({selectedDuration} Bulan) menggunakan Termux dan mengirimkannya kembali ke Anda.
+              </p>
+            </div>
+
+            {/* Input Serial Number */}
+            <form onSubmit={handleDoActivate} className="bg-white border-2 border-emerald-600/30 rounded-2xl p-4 space-y-3 shadow-xs">
+              <div className="flex items-center gap-2">
+                <Key className="w-4 h-4 text-[#008952]" />
+                <h4 className="font-extrabold text-xs text-slate-900">
+                  Masukkan Serial Number dari Developer:
+                </h4>
+              </div>
+
+              <input
+                type="text"
+                value={inputSerial}
+                onChange={(e) => {
+                  setInputSerial(e.target.value.toUpperCase());
+                  setActivationResult(null);
+                }}
+                placeholder="Contoh: BQPRO-CORE-3M-A48F-72E1"
+                className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2.5 text-xs font-mono font-bold text-slate-900 tracking-wider uppercase placeholder:normal-case placeholder:text-slate-400 focus:outline-hidden focus:ring-2 focus:ring-emerald-500 focus:bg-white"
+              />
+
+              {activationResult && (
+                <div className={`p-2.5 rounded-xl text-xs font-bold flex items-center gap-2 ${
+                  activationResult.success 
+                    ? 'bg-emerald-100 text-[#008952] border border-emerald-300' 
+                    : 'bg-rose-100 text-rose-800 border border-rose-300'
+                }`}>
+                  {activationResult.success ? <Check className="w-4 h-4 shrink-0" /> : <X className="w-4 h-4 shrink-0" />}
+                  <span>{activationResult.message}</span>
+                </div>
+              )}
+
+              <button
+                type="submit"
+                className="w-full bg-[#008952] hover:bg-emerald-700 active:scale-95 text-white py-2.5 rounded-xl text-xs font-black shadow-md shadow-emerald-700/20 transition-all cursor-pointer flex items-center justify-center gap-1.5"
+              >
+                <Zap className="w-4 h-4 fill-white" />
+                <span>Aktivasi Bengkel Qu PRO Sekarang</span>
+              </button>
+            </form>
+          </div>
+        )}
+
+        {/* ================= TAB 6: UPDATE APP (AUTO-ADAPT TANPA UNINSTALL) ================= */}
+        {activeTab === 'setting-update' && (
+          <div className="space-y-3 animate-in fade-in">
+            <div className="bg-white rounded-2xl p-4 shadow-xs border border-slate-100">
+              <div className="flex items-center gap-2 mb-1">
+                <Sparkles className="w-4 h-4 text-[#008952]" />
+                <h3 className="font-bold text-slate-900 text-sm">Pembaruan Aplikasi & Sinkronisasi Skema</h3>
+              </div>
+              <p className="text-xs text-slate-500 leading-relaxed">
+                Aplikasi Bengkel Qu dirancang untuk dapat <strong>ditimpa pembaruan langsung</strong> tanpa perlu melakukan uninstall terlebih dahulu. Data lama Anda (antrian, stok, kasir, pelanggan) otomatis menyesuaikan.
+              </p>
+            </div>
+
+            {migrationStatus && (
+              <div className="p-3 bg-emerald-100 border border-emerald-300 text-[#008952] rounded-2xl text-xs font-bold flex items-center gap-2">
+                <Check className="w-4 h-4 shrink-0" />
+                <span>{migrationStatus.msg}</span>
+              </div>
+            )}
+
+            <div className="bg-white rounded-2xl p-4 shadow-xs border border-slate-100 space-y-3">
+              <div className="flex items-center justify-between pb-2 border-b border-slate-100 text-xs">
+                <span className="text-slate-500">Versi Terpasang Saat Ini</span>
+                <span className="font-mono font-black text-slate-900 bg-slate-100 px-2 py-0.5 rounded-lg">
+                  v{APP_VERSION}-pro
+                </span>
+              </div>
+
+              <div className="flex items-center justify-between pb-2 border-b border-slate-100 text-xs">
+                <span className="text-slate-500">Status Kompatibilitas Data</span>
+                <span className="font-bold text-emerald-700 bg-emerald-50 px-2.5 py-0.5 rounded-full border border-emerald-200">
+                  Kompatibel 100%
+                </span>
+              </div>
+
+              <div className="flex items-center justify-between text-xs">
+                <span className="text-slate-500">Mekanisme Update</span>
+                <span className="font-semibold text-slate-800">
+                  Langsung Timpa (Zero Data Loss)
+                </span>
+              </div>
+            </div>
+
+            <div className="bg-emerald-50 border border-emerald-200 rounded-2xl p-3.5 space-y-2">
+              <div className="flex items-center gap-1.5 text-xs font-bold text-emerald-950">
+                <Check className="w-4 h-4 text-[#008952]" />
+                <span>Keamanan Data Saat Update</span>
+              </div>
+              <p className="text-[11px] text-emerald-800 leading-relaxed">
+                Saat developer merilis pembaruan antarmuka atau fitur baru, Anda cukup merefresh atau menimpa aplikasi. Algoritma auto-migrasi akan memeriksa dan menambahkan kolom baru secara otomatis tanpa mereset atau menghapus transaksi riil yang sudah ada.
+              </p>
+            </div>
+
+            <button
+              type="button"
+              onClick={handleRunMigrationCheck}
+              className="w-full bg-[#008952] hover:bg-emerald-700 active:scale-95 text-white font-bold py-2.5 px-4 rounded-xl text-xs flex items-center justify-center gap-2 shadow-xs transition-all cursor-pointer"
+            >
+              <RefreshCw className="w-4 h-4" />
+              <span>Sinkronkan & Sesuaikan Skema Data Sekarang</span>
+            </button>
+          </div>
+        )}
+
       </div>
 
       {/* Confirmation Modal for Reset */}
       {resetModalMode && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in">
           <div className="bg-white rounded-3xl w-full max-w-sm overflow-hidden shadow-2xl border border-slate-100 p-5 space-y-3.5">
-            <div className="w-12 h-12 rounded-2xl bg-rose-100 text-rose-600 flex items-center justify-center mx-auto">
+            <div className={`w-12 h-12 rounded-2xl flex items-center justify-center mx-auto ${
+              resetModalMode === 'clean_slate' ? 'bg-rose-100 text-rose-600' : 'bg-emerald-100 text-[#008952]'
+            }`}>
               <AlertTriangle className="w-6 h-6" />
             </div>
 
             <div className="text-center">
               <h3 className="font-extrabold text-slate-900 text-sm">
-                Konfirmasi Reset {resetModalMode === 'daily' ? 'Harian' : 'Pabrik'}
+                {resetModalMode === 'clean_slate'
+                  ? 'Konfirmasi Hapus Bersih Total (0 Tersisa)'
+                  : resetModalMode === 'factory'
+                  ? 'Konfirmasi Muat Ulang Data Sampel Pabrik'
+                  : 'Konfirmasi Bersihkan Shift Hari Ini'}
               </h3>
-              <p className="text-xs text-slate-500 mt-1">
-                Tindakan ini tidak dapat dibatalkan. Ketik kata <span className="font-black text-rose-600">RESET</span> di bawah untuk melanjutkan.
+              <p className="text-xs text-slate-500 mt-1 leading-relaxed">
+                {resetModalMode === 'clean_slate'
+                  ? 'PERINGATAN: Seluruh antrian, barang, pelanggan, dan transaksi akan dikosongkan total tanpa ada data yang tersisa.'
+                  : 'Data akan dimuat ulang ke kondisi standar.'}
+              </p>
+              <p className="text-xs font-bold text-slate-700 mt-2">
+                Ketik kata <span className="font-black text-rose-600">HAPUS</span> atau <span className="font-black text-rose-600">RESET</span> di bawah untuk melanjutkan:
               </p>
             </div>
 
@@ -620,7 +1150,7 @@ export const SettingView: React.FC<SettingViewProps> = ({
               type="text"
               value={resetConfirmationText}
               onChange={(e) => setResetConfirmationText(e.target.value)}
-              placeholder="Ketik RESET"
+              placeholder="Ketik HAPUS atau RESET"
               className="w-full text-center bg-slate-50 border border-slate-300 rounded-xl py-2 font-mono text-sm uppercase font-bold tracking-widest text-slate-900 focus:outline-hidden focus:ring-2 focus:ring-rose-500"
             />
 
@@ -637,11 +1167,14 @@ export const SettingView: React.FC<SettingViewProps> = ({
               </button>
               <button
                 type="button"
-                disabled={resetConfirmationText.toUpperCase() !== 'RESET'}
+                disabled={
+                  resetConfirmationText.trim().toUpperCase() !== 'RESET' &&
+                  resetConfirmationText.trim().toUpperCase() !== 'HAPUS'
+                }
                 onClick={handleExecuteReset}
                 className="flex-1 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold text-xs shadow-md transition-all cursor-pointer"
               >
-                Ya, Reset Sekarang
+                Ya, Eksekusi Sekarang
               </button>
             </div>
           </div>

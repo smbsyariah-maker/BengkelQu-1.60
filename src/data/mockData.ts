@@ -357,10 +357,26 @@ export const MENU_MODULES: MenuModuleConfig[] = [
       {
         id: 'setting-reset',
         title: 'Reset',
-        subtitle: 'Kembalikan Pengaturan & Data Awal',
+        subtitle: 'Hapus Bersih Total / Reset Data',
         iconName: 'RotateCcw',
-        badge: 'Pabrik',
+        badge: 'Bersih',
         targetView: 'setting-reset'
+      },
+      {
+        id: 'setting-aktivasi',
+        title: 'Aktivasi PRO',
+        subtitle: 'Serial Number Email bageurhendri@gmail.com',
+        iconName: 'Key',
+        badge: 'Lisensi',
+        targetView: 'setting-aktivasi'
+      },
+      {
+        id: 'setting-update',
+        title: 'Update App',
+        subtitle: 'Auto-Adapt Data Tanpa Uninstall',
+        iconName: 'Sparkles',
+        badge: 'v2.4.0',
+        targetView: 'setting-update'
       }
     ]
   }

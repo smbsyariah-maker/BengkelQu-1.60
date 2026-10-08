@@ -13,7 +13,7 @@ import {
   TrendingUp,
   AlertCircle
 } from 'lucide-react';
-import { MenuModuleConfig, ServiceQueue, WorkshopProfile, UserSession } from '../../types';
+import { MenuModuleConfig, ServiceQueue, WorkshopProfile, UserSession, SubscriptionState } from '../../types';
 import { IconRenderer } from '../common/IconRenderer';
 
 interface HomeDashboardProps {
@@ -28,6 +28,8 @@ interface HomeDashboardProps {
   profile?: WorkshopProfile;
   userSession?: UserSession | null;
   onLogout?: () => void;
+  subscription?: SubscriptionState;
+  onOpenSubscription?: () => void;
 }
 
 export const HomeDashboard: React.FC<HomeDashboardProps> = ({
@@ -41,7 +43,9 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
   onQuickSearchPlat,
   profile,
   userSession,
-  onLogout
+  onLogout,
+  subscription,
+  onOpenSubscription
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
 
@@ -83,9 +87,21 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
                 <span className="text-[11px] font-medium text-emerald-100 uppercase tracking-wider">
                   Bengkel Qu 1.60
                 </span>
-                <span className="px-1.5 py-0.2 bg-emerald-700/80 rounded text-[9px] font-bold text-emerald-200">
-                  PRO
-                </span>
+                <button
+                  type="button"
+                  onClick={onOpenSubscription}
+                  title="Lihat status paket langganan & trial"
+                  className="px-2 py-0.5 bg-emerald-700/90 hover:bg-emerald-600 rounded-full text-[9px] font-black text-emerald-100 border border-emerald-500/50 flex items-center gap-1 cursor-pointer transition-colors"
+                >
+                  <Sparkles className="w-2.5 h-2.5 text-amber-300" />
+                  <span>
+                    {subscription?.isTrialActive 
+                      ? `Trial: ${subscription.trialDaysRemaining} Hari` 
+                      : subscription?.isSubscribed 
+                      ? subscription.planName.split(' ')[0] 
+                      : 'Free Lifetime'}
+                  </span>
+                </button>
               </div>
               <h2 className="text-lg font-bold text-white tracking-tight leading-tight">
                 Halo, {userSession?.name?.split(' ')[0] || profile?.ownerName?.split(' ')[0] || 'SMB Syariah'} 👋
@@ -183,6 +199,73 @@ export const HomeDashboard: React.FC<HomeDashboardProps> = ({
           </div>
         </div>
       </div>
+
+      {/* Trial Countdown & Pro Status Quick Banner */}
+      {subscription && (
+        <div className="px-4 mt-3">
+          {subscription.isTrialActive ? (
+            <div 
+              onClick={onOpenSubscription}
+              className="bg-amber-50 hover:bg-amber-100/80 border border-amber-300 rounded-2xl p-3 flex items-center justify-between gap-2.5 transition-all cursor-pointer shadow-2xs group"
+            >
+              <div className="flex items-center gap-2.5 min-w-0">
+                <div className="w-8 h-8 rounded-xl bg-amber-500 text-white flex items-center justify-center shrink-0 shadow-2xs">
+                  <Sparkles className="w-4 h-4 fill-white" />
+                </div>
+                <div className="min-w-0">
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-xs font-black text-amber-950">
+                      Masa Trial 10 Hari Aktif
+                    </span>
+                    <span className="px-2 py-0.2 rounded-full bg-amber-400 text-amber-950 font-black text-[9px]">
+                      Sisa {subscription.trialDaysRemaining} Hari
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-amber-800 truncate">
+                    Semua modul CRM, Marketing & Laporan terbuka penuh gratis
+                  </p>
+                </div>
+              </div>
+
+              <div className="shrink-0 flex items-center gap-1 text-[11px] font-black text-amber-900 group-hover:translate-x-0.5 transition-transform">
+                <span>Aktivasi PRO</span>
+                <ChevronRight className="w-3.5 h-3.5 stroke-[2.5]" />
+              </div>
+            </div>
+          ) : subscription.isSubscribed ? (
+            <div 
+              onClick={onOpenSubscription}
+              className="bg-emerald-50 hover:bg-emerald-100/80 border border-emerald-300 rounded-2xl p-3 flex items-center justify-between gap-2.5 transition-all cursor-pointer shadow-2xs group"
+            >
+              <div className="flex items-center gap-2.5 min-w-0">
+                <div className="w-8 h-8 rounded-xl bg-[#008952] text-white flex items-center justify-center shrink-0 shadow-2xs">
+                  <Sparkles className="w-4 h-4" />
+                </div>
+                <div className="min-w-0">
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-xs font-black text-[#008952]">
+                      Bengkel Qu PRO Aktif
+                    </span>
+                    <span className="px-2 py-0.2 rounded-full bg-emerald-600 text-white font-black text-[9px]">
+                      {subscription.subscriptionDurationMonths ? `${subscription.subscriptionDurationMonths} Bulan` : 'Aktif'}
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-emerald-800 truncate">
+                    {subscription.subscriptionExpiryDate
+                      ? `Berlaku hingga ${new Date(subscription.subscriptionExpiryDate).toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' })}`
+                      : 'Semua fitur profesional terbuka penuh'}
+                  </p>
+                </div>
+              </div>
+
+              <div className="shrink-0 flex items-center gap-1 text-[11px] font-black text-[#008952] group-hover:translate-x-0.5 transition-transform">
+                <span>Info Lisensi</span>
+                <ChevronRight className="w-3.5 h-3.5 stroke-[2.5]" />
+              </div>
+            </div>
+          ) : null}
+        </div>
+      )}
 
       {/* 3. MENU UTAMA (Hanya Menampilkan Ikon dan Nama) */}
       <div className="px-4 mt-5">

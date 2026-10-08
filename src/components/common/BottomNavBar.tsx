@@ -22,8 +22,8 @@ export const BottomNavBar: React.FC<BottomNavBarProps> = ({
 
   return (
     <nav 
-      aria-label="Navigasi Cepat Bawah"
-      className="w-full bg-white border-t border-slate-200/90 shadow-[0_-4px_16px_rgba(0,0,0,0.06)] px-2 pt-2 pb-[max(env(safe-area-inset-bottom,0px),0.75rem)] flex items-center justify-around select-none shrink-0 z-40"
+      aria-label="Navigasi Cepat Bawah Terkunci"
+      className="w-full bg-white/95 backdrop-blur-md border-t border-slate-200/80 shadow-[0_-2px_12px_rgba(0,0,0,0.05)] px-1 pt-1 pb-[max(env(safe-area-inset-bottom,0px),0.35rem)] flex items-center justify-around select-none shrink-0 sticky bottom-0 z-50 pointer-events-auto"
     >
       {tabs.map((tab) => {
         const IconComponent = tab.icon;
@@ -34,27 +34,27 @@ export const BottomNavBar: React.FC<BottomNavBarProps> = ({
             key={tab.id}
             type="button"
             onClick={() => onTabChange(tab.id)}
-            className={`flex flex-col items-center justify-center py-1 px-3 rounded-xl transition-all duration-200 relative group cursor-pointer active:scale-95 ${
+            className={`flex flex-col items-center justify-center py-0.5 px-2 rounded-lg transition-all duration-150 relative group cursor-pointer active:scale-95 ${
               isActive ? 'text-[#008952]' : 'text-slate-400 hover:text-slate-600'
             }`}
           >
             <div className="relative">
               <div
-                className={`p-1.5 rounded-xl transition-all ${
-                  isActive ? 'bg-emerald-50 text-[#008952] scale-105' : 'group-hover:bg-slate-50'
+                className={`p-1 rounded-lg transition-all ${
+                  isActive ? 'bg-emerald-50 text-[#008952]' : 'group-hover:bg-slate-50'
                 }`}
               >
-                <IconComponent className="w-5 h-5 stroke-[2.3]" />
+                <IconComponent className="w-[18px] h-[18px] stroke-[2.2]" />
               </div>
               {tab.badge && (
-                <span className="absolute -top-1 -right-2 bg-rose-500 text-white text-[9px] font-bold w-4 h-4 rounded-full flex items-center justify-center border-2 border-white shadow-xs">
+                <span className="absolute -top-0.5 -right-1.5 bg-rose-500 text-white text-[8px] font-black w-3.5 h-3.5 rounded-full flex items-center justify-center border border-white shadow-2xs leading-none">
                   {tab.badge}
                 </span>
               )}
             </div>
             <span
-              className={`text-[10px] tracking-tight mt-0.5 transition-all ${
-                isActive ? 'font-bold text-[#008952]' : 'font-medium text-slate-500'
+              className={`text-[9.5px] leading-tight tracking-tight mt-0.5 transition-all ${
+                isActive ? 'font-black text-[#008952]' : 'font-medium text-slate-500'
               }`}
             >
               {tab.label}

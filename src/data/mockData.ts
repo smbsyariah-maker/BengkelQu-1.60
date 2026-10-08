@@ -1,4 +1,16 @@
-import { MenuModuleConfig, ServiceQueue, Sparepart, Transaction, Mechanic, CustomerVehicle, NotificationItem } from '../types';
+import { 
+  MenuModuleConfig, 
+  ServiceQueue, 
+  Sparepart, 
+  Transaction, 
+  Mechanic, 
+  CustomerVehicle, 
+  NotificationItem, 
+  DamagedGood, 
+  ProcurementRecord,
+  MarketingCampaign,
+  PromoVoucher
+} from '../types';
 
 export const MENU_MODULES: MenuModuleConfig[] = [
   {
@@ -11,35 +23,44 @@ export const MENU_MODULES: MenuModuleConfig[] = [
     description: 'Penerimaan unit, antrian servis, pengerjaan teknisi, dan serah terima kendaraan.',
     subMenus: [
       {
-        id: 'antrian',
-        title: 'Antrian',
-        subtitle: 'Monitor & Ambil Nomor',
-        iconName: 'ListOrdered',
-        badge: '4 Menunggu',
-        targetView: 'service-queue'
+        id: 'registrasi',
+        title: 'Registrasi',
+        subtitle: 'Input Pendaftaran Unit Baru',
+        iconName: 'ClipboardEdit',
+        badge: 'Form Baru',
+        targetView: 'service-register'
       },
       {
-        id: 'daftar-service',
-        title: 'Daftar Service',
-        subtitle: 'Service Masuk & Estimasi',
-        iconName: 'ClipboardCheck',
-        badge: '8 Total',
-        targetView: 'service-list'
+        id: 'antrian',
+        title: 'Antrian',
+        subtitle: 'Daftar Menunggu Servis',
+        iconName: 'ListOrdered',
+        badge: 'Menunggu',
+        targetView: 'service-queue'
       },
       {
         id: 'proses-service',
         title: 'Proses Service',
         subtitle: 'Pengerjaan & Pergantian Part',
         iconName: 'Cog',
-        badge: '3 Dikerjakan',
+        badge: 'Dikerjakan',
         targetView: 'service-progress'
       },
       {
-        id: 'riwayat-service',
-        title: 'Riwayat Service',
-        subtitle: 'Arsip & Rekam Medis Motor',
-        iconName: 'History',
-        targetView: 'service-history'
+        id: 'selesai-service',
+        title: 'Selesai Service',
+        subtitle: 'Unit Selesai & Cetak Nota / WA',
+        iconName: 'CheckCircle2',
+        badge: 'Selesai',
+        targetView: 'service-completed'
+      },
+      {
+        id: 'total-service',
+        title: 'Total Service',
+        subtitle: 'Rekap Semua Servis Hari Ini',
+        iconName: 'Layers',
+        badge: 'Harian',
+        targetView: 'service-total'
       }
     ]
   },
@@ -53,72 +74,98 @@ export const MENU_MODULES: MenuModuleConfig[] = [
     description: 'Pencatatan transaksi pembayaran jasa dan suku cadang dengan cetak struk cetak nota.',
     subMenus: [
       {
-        id: 'kasir-baru',
-        title: 'Kasir POS Baru',
-        subtitle: 'Checkout Jasa & Sparepart',
+        id: 'kasir',
+        title: 'Kasir',
+        subtitle: 'Pembayaran Servis & POS',
         iconName: 'CreditCard',
+        badge: 'Bayar',
         targetView: 'pos-checkout'
+      },
+      {
+        id: 'piutang',
+        title: 'Piutang',
+        subtitle: 'Tagihan Servis Belum Lunas',
+        iconName: 'Clock',
+        badge: 'Tempo',
+        targetView: 'pos-receivable'
       },
       {
         id: 'riwayat-transaksi',
         title: 'Riwayat Transaksi',
-        subtitle: 'Cetak Nota & Rekap Invoice',
+        subtitle: 'Log Riwayat Semua Nota',
         iconName: 'FileText',
-        badge: '16 Nota',
+        badge: 'Riwayat',
         targetView: 'pos-history'
       },
       {
-        id: 'rekap-setoran',
-        title: 'Tutup Kasir Harian',
-        subtitle: 'Rekap Kas Masuk Shift Hari Ini',
-        iconName: 'Calculator',
-        targetView: 'pos-closing'
+        id: 'petty-cash',
+        title: 'Petty Cash',
+        subtitle: 'Modal & Uang Kembalian',
+        iconName: 'Coins',
+        badge: 'Modal',
+        targetView: 'pos-pettycash'
       },
       {
-        id: 'piutang-pending',
-        title: 'Piutang & Pending',
-        subtitle: 'Tagihan Servis Belum Lunas',
-        iconName: 'Clock',
-        badge: '1 Pending',
-        targetView: 'pos-pending'
+        id: 'kas-kecil',
+        title: 'Kas Kecil',
+        subtitle: 'Biaya Operasional Harian',
+        iconName: 'Receipt',
+        badge: 'Biaya',
+        targetView: 'pos-expenses'
+      },
+      {
+        id: 'closingan',
+        title: 'Closingan',
+        subtitle: 'Tutup Shift & Rekonsiliasi',
+        iconName: 'Calculator',
+        badge: 'Tutup Buku',
+        targetView: 'pos-closing'
       }
     ]
   },
   {
     id: 'inventaris',
     title: 'Inventaris',
-    subtitle: 'Suku Cadang & Oli',
+    subtitle: 'Suku Cadang & Stok',
     iconName: 'Package',
     badgeCount: '3 Kritis',
     badgeColor: 'bg-amber-500',
-    description: 'Monitoring stok oli, sparepart, barcode scanner, lokasi rak, dan harga jual/beli.',
+    description: 'Pusat tata kelola logistik masuk, katalog suku cadang, stok kritis, pelaporan barang rusak, dan log pengadaan.',
     subMenus: [
       {
+        id: 'sparepart-datang',
+        title: 'Sparepart Datang (Inbound)',
+        subtitle: 'Sparepart Baru / Tambah Qty / Scan Masuk',
+        iconName: 'PlusCircle',
+        badge: 'Inbound',
+        targetView: 'inv-inbound'
+      },
+      {
         id: 'katalog-sparepart',
-        title: 'Katalog Sparepart & Oli',
-        subtitle: 'Cek Stok, Lokasi Rak & Harga',
+        title: 'Katalog Sparepart (Master)',
+        subtitle: 'Daftar Seluruh Suku Cadang & Ketersediaan',
         iconName: 'Boxes',
         targetView: 'inv-catalog'
       },
       {
-        id: 'tambah-sparepart',
-        title: 'Tambah Sparepart Baru',
-        subtitle: 'Input Barang Masuk & Barcode',
-        iconName: 'PlusCircle',
-        targetView: 'inv-add'
-      },
-      {
-        id: 'stok-menipis',
-        title: 'Stok Menipis (Restock)',
-        subtitle: 'Peringatan Part di Bawah Minimum',
+        id: 'stok-kritis',
+        title: 'Stok Kritis',
+        subtitle: 'Monitoring Part di Bawah Batas Minimum',
         iconName: 'AlertTriangle',
-        badge: '3 Perlu Order',
-        targetView: 'inv-lowstock'
+        badge: 'Kritis',
+        targetView: 'inv-critical'
       },
       {
-        id: 'pengadaan-suplier',
+        id: 'barang-rusak',
+        title: 'Barang Rusak',
+        subtitle: 'Form Pengajuan & Log Barang Rusak / Cacat',
+        iconName: 'PackageX',
+        targetView: 'inv-damaged'
+      },
+      {
+        id: 'riwayat-pengadaan',
         title: 'Riwayat Pengadaan',
-        subtitle: 'Order Suplier & Pembelian Part',
+        subtitle: 'Log Pembelian & Penerimaan dari Suplier',
         iconName: 'Truck',
         targetView: 'inv-procurement'
       }
@@ -131,29 +178,28 @@ export const MENU_MODULES: MenuModuleConfig[] = [
     iconName: 'Users',
     badgeCount: '128 Unit',
     badgeColor: 'bg-emerald-500',
-    description: 'Pusat database identitas pelanggan, plat nomor kendaraan, dan riwayat ganti oli.',
+    description: 'Pusat master identitas pelanggan, keterhubungan data kendaraan bermotor, dan riwayat servis per unit.',
     subMenus: [
       {
-        id: 'database-pelanggan',
-        title: 'Database Pelanggan & Plat',
-        subtitle: 'Cari Berdasarkan Plat Nomor',
+        id: 'daftar-pelanggan',
+        title: 'Daftar Pelanggan (Master)',
+        subtitle: 'Nama, Nomor Telepon/WhatsApp & Alamat',
         iconName: 'UserCheck',
-        targetView: 'cust-list'
+        targetView: 'cust-master'
       },
       {
-        id: 'reminder-servis',
-        title: 'Reminder Servis Berkala',
-        subtitle: 'Pengingat Ganti Oli via WhatsApp',
+        id: 'kendaraan-pelanggan',
+        title: 'Kendaraan Pelanggan',
+        subtitle: 'Profil Kendaraan, Merk, Tipe & Plat Nomor',
         iconName: 'BellRing',
-        badge: '5 Jadwal',
-        targetView: 'cust-reminder'
+        targetView: 'cust-vehicles'
       },
       {
-        id: 'member-poin',
-        title: 'Poin Loyalitas Member',
-        subtitle: 'Kupon Servis Gratis & Reward',
+        id: 'riwayat-servis-pelanggan',
+        title: 'Riwayat Servis Pelanggan',
+        subtitle: 'Card Detail & Log Perawatan Tiap Kendaraan',
         iconName: 'Award',
-        targetView: 'cust-loyalty'
+        targetView: 'cust-history'
       }
     ]
   },
@@ -164,29 +210,29 @@ export const MENU_MODULES: MenuModuleConfig[] = [
     iconName: 'Megaphone',
     badgeCount: '2 Promo',
     badgeColor: 'bg-emerald-500',
-    description: 'Promosi bengkel terarah, broadcast pesan WhatsApp, dan kode voucher promo.',
+    description: 'Kampanye promosi bengkel, formulir pengiriman broadcast WhatsApp, manajemen voucher diskon, dan log pesan.',
     subMenus: [
       {
         id: 'broadcast-wa',
         title: 'Broadcast WhatsApp',
-        subtitle: 'Kirim Promo Otomatis ke Pelanggan',
+        subtitle: 'Form Draf & Kirim Pesan Promo / Reminder',
         iconName: 'Send',
         targetView: 'mkt-broadcast'
       },
       {
-        id: 'voucher-diskon',
-        title: 'Voucher & Kupon Promo',
-        subtitle: 'Diskon Jasa Servis & Oli',
+        id: 'promo-diskon',
+        title: 'Promo & Diskon',
+        subtitle: 'Kelola Voucher Diskon & Potongan Servis',
         iconName: 'Tag',
         badge: 'Aktif',
-        targetView: 'mkt-voucher'
+        targetView: 'mkt-promo'
       },
       {
-        id: 'ulasan-google',
-        title: 'Ulasan & Rating Bengkel',
-        subtitle: 'Monitor Kepuasan Pelanggan',
+        id: 'riwayat-pesan',
+        title: 'Riwayat Pesan / Campaign',
+        subtitle: 'Log Kampanye Pesan & Pengiriman Promosi',
         iconName: 'Star',
-        targetView: 'mkt-reviews'
+        targetView: 'mkt-history'
       }
     ]
   },
@@ -197,28 +243,28 @@ export const MENU_MODULES: MenuModuleConfig[] = [
     iconName: 'BarChart3',
     badgeCount: 'Hari Ini',
     badgeColor: 'bg-emerald-500',
-    description: 'Laporan keuangan komprehensif, laba bersih, komisi mekanik, dan ekspor data.',
+    description: 'Laporan pendapatan arus kas harian/bulanan, audit volume servis kendaraan, dan pemantauan piutang serta kas kecil.',
     subMenus: [
       {
-        id: 'omset-harian',
-        title: 'Omset & Pendapatan',
-        subtitle: 'Ringkasan Pemasukan Harian & Bulanan',
+        id: 'laporan-pendapatan',
+        title: 'Laporan Pendapatan (Omzet)',
+        subtitle: 'Ringkasan Inflow Keuangan & Log Transaksi',
         iconName: 'TrendingUp',
         targetView: 'rep-revenue'
       },
       {
-        id: 'kinerja-mekanik',
-        title: 'Kinerja & Komisi Mekanik',
-        subtitle: 'Pencapaian Unit & Bagi Hasil',
+        id: 'laporan-servis',
+        title: 'Laporan Servis',
+        subtitle: 'Rekap Unit Selesai vs Aktif per Periode',
         iconName: 'UserCheck2',
-        targetView: 'rep-mechanics'
+        targetView: 'rep-service'
       },
       {
-        id: 'laba-sparepart',
-        title: 'Laba Servis vs Sparepart',
-        subtitle: 'Margin Keuntungan Tiap Kategori',
+        id: 'laporan-piutang-keuangan',
+        title: 'Laporan Piutang & Keuangan',
+        subtitle: 'Rincian Tagihan Belum Lunas & Kas Kecil',
         iconName: 'PieChart',
-        targetView: 'rep-margin'
+        targetView: 'rep-finance'
       }
     ]
   },
@@ -406,12 +452,12 @@ export const INITIAL_QUEUES: ServiceQueue[] = [
     vehicleType: 'Motor Matic',
     serviceCategory: 'Ganti Oli & Filter',
     mechanicName: 'Mas Eko',
-    status: 'proses',
+    status: 'selesai',
     complaint: 'Ganti oli mesin rutin dan cek lampu rem belakang yang mati.',
     timeIn: '08:45 WIB',
     estimatedCompletion: '09:30 WIB',
-    progressPercent: 40,
-    notes: 'Lampu bohlam rem putus, sudah diganti baru.',
+    progressPercent: 100,
+    notes: 'Lampu bohlam rem putus, sudah diganti baru. Pengerjaan selesai.',
     totalCost: 125000,
     items: [
       { id: 'i-5', name: 'Yamalube Super Matic 1.0L', price: 78000, qty: 1, type: 'part' },
@@ -692,6 +738,24 @@ export const INITIAL_TRANSACTIONS: Transaction[] = [
     total: 145000,
     paymentMethod: 'Transfer Bank',
     status: 'Lunas'
+  },
+  {
+    id: 'tx-4',
+    invoiceNumber: 'INV-20261006-004',
+    date: '06 Okt 2026, 11:15 WIB',
+    customerName: 'Pak Wahyu Hidayat',
+    plateNumber: 'D 5512 VXZ',
+    vehicleModel: 'Honda PCX 160',
+    mechanicName: 'Mas Joko (Senior)',
+    items: [
+      { id: 'tx-i-9', name: 'Jasa Servis CVT & Ganti Roller', price: 65000, qty: 1, type: 'jasa' },
+      { id: 'tx-i-10', name: 'Vanbelt Honda PCX 160 Original', price: 135000, qty: 1, type: 'part' }
+    ],
+    subtotal: 200000,
+    discount: 0,
+    total: 200000,
+    paymentMethod: 'Tunai',
+    status: 'Belum Lunas'
   }
 ];
 
@@ -707,8 +771,11 @@ export const INITIAL_CUSTOMERS: CustomerVehicle[] = [
     id: 'c-1',
     name: 'Ahmad Fauzi',
     phone: '081234567890',
+    address: 'Jl. Gegerkalong Hilir No. 42, Sukasari, Bandung',
     plateNumber: 'D 4521 ABC',
-    vehicleModel: 'Honda Vario 160',
+    vehicleBrand: 'Honda',
+    vehicleType: 'Vario 160 ABS',
+    vehicleModel: 'Honda Vario 160 ABS (2023)',
     year: '2023',
     lastServiceDate: '06 Okt 2026',
     totalVisits: 6,
@@ -719,37 +786,227 @@ export const INITIAL_CUSTOMERS: CustomerVehicle[] = [
     id: 'c-2',
     name: 'Siti Rahmawati',
     phone: '085712389901',
+    address: 'Komplek Antapani Mas Blok C2 No. 11, Antapani, Bandung',
     plateNumber: 'B 3190 TKL',
-    vehicleModel: 'Yamaha NMAX 155',
+    vehicleBrand: 'Yamaha',
+    vehicleType: 'NMAX 155 Connected',
+    vehicleModel: 'Yamaha NMAX 155 (2022)',
     year: '2022',
     lastServiceDate: '06 Okt 2026',
     totalVisits: 4,
     loyaltyPoints: 80,
-    notes: 'Prioritaskan cek rem dan lampu.'
+    notes: 'Prioritaskan cek kampas rem dan lampu depan LED.'
   },
   {
     id: 'c-3',
     name: 'Bambang Supriyanto',
     phone: '081399881122',
+    address: 'Jl. Cikutra Barat No. 89, Cibeunying Kidul, Bandung',
     plateNumber: 'D 2819 KHG',
-    vehicleModel: 'Honda BeAT eSP FI',
+    vehicleBrand: 'Honda',
+    vehicleType: 'BeAT eSP CBS ISS',
+    vehicleModel: 'Honda BeAT eSP FI (2020)',
     year: '2020',
     lastServiceDate: '06 Okt 2026',
     totalVisits: 8,
     loyaltyPoints: 160,
-    notes: 'Member setia sejak 2021.'
+    notes: 'Member setia sejak 2021, sering ganti busi NGK.'
   },
   {
     id: 'c-4',
     name: 'Kevin Wijaya',
     phone: '082155667788',
+    address: 'Jl. Surya Sumantri No. 102, Pasteur, Bandung',
     plateNumber: 'D 6044 VXZ',
-    vehicleModel: 'Yamaha Aerox 155',
+    vehicleBrand: 'Yamaha',
+    vehicleType: 'Aerox 155 CyberCity',
+    vehicleModel: 'Yamaha Aerox 155 (2022)',
     year: '2022',
     lastServiceDate: '12 Sep 2026',
     totalVisits: 3,
     loyaltyPoints: 60,
-    notes: 'Suka part racing aftermarket (Daytona).'
+    notes: 'Suka part racing aftermarket (Daytona Gold).'
+  },
+  {
+    id: 'c-5',
+    name: 'Dewi Lestari',
+    phone: '081987654321',
+    address: 'Jl. Buah Batu Raya No. 154, Bandung',
+    plateNumber: 'D 5122 TUV',
+    vehicleBrand: 'Honda',
+    vehicleType: 'Scoopy Prestige Smartkey',
+    vehicleModel: 'Honda Scoopy Prestige (2024)',
+    year: '2024',
+    lastServiceDate: '28 Sep 2026',
+    totalVisits: 2,
+    loyaltyPoints: 40,
+    notes: 'Servis berkala gratis pertama dari dealer lewat.'
+  }
+];
+
+export const INITIAL_CAMPAIGNS: MarketingCampaign[] = [
+  {
+    id: 'cmp-1',
+    title: 'Reminder Servis Berkala & Ganti Oli Rutin Oktober',
+    channel: 'WhatsApp',
+    targetAudience: 'Pelanggan servis > 2 bulan lalu (85 Kontak)',
+    messageContent: 'Halo Sahabat Bengkel Qu! Mengingatkan motor kesayangan Anda sudah memasuki jadwal servis berkala & ganti oli rutin. Nikmati gratis cek rem & tekanan ban hari ini!',
+    sentDate: '06 Okt 2026, 09:30 WIB',
+    recipientCount: 85,
+    status: 'Terkirim',
+    deliveredPercent: 98
+  },
+  {
+    id: 'cmp-2',
+    title: 'Promo Paket Servis CVT + Tune Up Matic Diskon 20%',
+    channel: 'WhatsApp',
+    targetAudience: 'Pemilik Motor Matic (Vario, BeAT, NMAX, Aerox)',
+    messageContent: 'Motor terasa berat dan getar di tarikan awal? Rawat CVT motormu di Bengkel Qu dengan potongan 20%! Tunjukkan pesan ini ke kasir.',
+    sentDate: '01 Okt 2026, 10:15 WIB',
+    recipientCount: 120,
+    status: 'Terkirim',
+    deliveredPercent: 96
+  },
+  {
+    id: 'cmp-3',
+    title: 'Pengumuman Kupon Hadiah Loyalitas Member Bengkel Qu',
+    channel: 'Broadcast',
+    targetAudience: 'Member dengan Poin > 100',
+    messageContent: 'Terima kasih atas kesetiaan Anda! Tukarkan 100 Poin Loyalitas Anda dengan Gratis 1 Botol Oli Mesin MPX2/Yamalube di kasir Bengkel Qu.',
+    sentDate: '25 Sep 2026, 14:00 WIB',
+    recipientCount: 42,
+    status: 'Terkirim',
+    deliveredPercent: 100
+  }
+];
+
+export const INITIAL_VOUCHERS: PromoVoucher[] = [
+  {
+    id: 'vch-1',
+    code: 'BENGKELQU10',
+    title: 'Diskon Jasa Servis Ringan & Berkala 10%',
+    discountType: 'Persen',
+    discountValue: 10,
+    minTransaction: 80000,
+    validUntil: '31 Okt 2026',
+    category: 'Jasa Servis',
+    quota: 50,
+    usedCount: 22,
+    isActive: true,
+    notes: 'Berlaku untuk semua jenis motor matic dan bebek.'
+  },
+  {
+    id: 'vch-2',
+    code: 'OLIBERKAH5',
+    title: 'Potongan Langsung Oli Mesin Rp 5.000',
+    discountType: 'Nominal',
+    discountValue: 5000,
+    minTransaction: 50000,
+    validUntil: '15 Nov 2026',
+    category: 'Oli',
+    quota: 100,
+    usedCount: 48,
+    isActive: true,
+    notes: 'Khusus varian oli full synthetic SPX2 dan Yamalube Super Matic.'
+  },
+  {
+    id: 'vch-3',
+    code: 'CVTTUNEUP15',
+    title: 'Diskon Paket Tune Up + CVT 15%',
+    discountType: 'Persen',
+    discountValue: 15,
+    minTransaction: 100000,
+    validUntil: '30 Nov 2026',
+    category: 'Jasa Servis',
+    quota: 30,
+    usedCount: 14,
+    isActive: true,
+    notes: 'Termasuk pembersihan throttle body dan roller CVT.'
+  }
+];
+
+export const INITIAL_DAMAGED_GOODS: DamagedGood[] = [
+  {
+    id: 'dmg-1',
+    sparepartId: 'p-1',
+    code: 'OIL-AHM-01',
+    name: 'AHM Oil MPX2 0.8L (Matic)',
+    qty: 1,
+    unit: 'Botol',
+    damageReason: 'Segel tutup botol bocor rembes saat pengiriman dari distributor',
+    reportedBy: 'Mas Dani (Mekanik)',
+    date: '06 Okt 2026, 14:15 WIB',
+    timestamp: Date.now() - 86400000,
+    status: 'Diajukan',
+    notes: 'Disimpan di rak retur suplier'
+  },
+  {
+    id: 'dmg-2',
+    sparepartId: 'p-5',
+    code: 'BS-NGK-01',
+    name: 'Busi NGK CPR9EA-9 (Vario/Beat/Scoopy)',
+    qty: 2,
+    unit: 'Pcs',
+    damageReason: 'Keramik busi retak / elektroda bengkok dari kotak kemasan',
+    reportedBy: 'Mas Eko (Mekanik)',
+    date: '05 Okt 2026, 11:20 WIB',
+    timestamp: Date.now() - 172800000,
+    status: 'Disetujui SPV',
+    notes: 'Menunggu klaim garansi toko agen'
+  }
+];
+
+export const INITIAL_PROCUREMENTS: ProcurementRecord[] = [
+  {
+    id: 'po-1',
+    poNumber: 'PO-20261006-001',
+    code: 'OIL-YAM-01',
+    name: 'Yamalube Super Matic 1.0L',
+    category: 'Oli & Pelumas',
+    supplier: 'PT Yamaha Motor Distributor Jabar',
+    qty: 24,
+    unit: 'Botol',
+    buyPrice: 65000,
+    totalCost: 1560000,
+    date: '06 Okt 2026, 10:15 WIB',
+    timestamp: Date.now() - 3600000 * 20,
+    receiver: 'Budi Santoso (Admin Gudang)',
+    type: 'Restock',
+    notes: 'Faktur lunas tempo 14 hari, barang diterima lengkap dan segel utuh'
+  },
+  {
+    id: 'po-2',
+    poNumber: 'PO-20261005-002',
+    code: 'CVT-VAN-01',
+    name: 'V-Belt Kit + Roller Beat FI KZL',
+    category: 'Transmisi / CVT',
+    supplier: 'Astra Otoparts Bandung',
+    qty: 10,
+    unit: 'Set',
+    buyPrice: 110000,
+    totalCost: 1100000,
+    date: '05 Okt 2026, 15:30 WIB',
+    timestamp: Date.now() - 3600000 * 45,
+    receiver: 'Bpk. Ahmad Fauzi (SPV)',
+    type: 'Restock',
+    notes: 'Pengadaan berkala stok fast moving CVT'
+  },
+  {
+    id: 'po-3',
+    poNumber: 'PO-20261004-001',
+    code: 'BAN-IRC-01',
+    name: 'Ban Luar Tubeless IRC NR82 90/90-14',
+    category: 'Ban & Velg',
+    supplier: 'Gajah Tunggal Banindo',
+    qty: 8,
+    unit: 'Pcs',
+    buyPrice: 175000,
+    totalCost: 1400000,
+    date: '04 Okt 2026, 13:00 WIB',
+    timestamp: Date.now() - 3600000 * 70,
+    receiver: 'Mas Eko (Mekanik)',
+    type: 'Restock',
+    notes: 'Restock ban tubeless matic harian'
   }
 ];
 

@@ -14,12 +14,17 @@ import {
   INITIAL_NOTIFICATIONS,
   INITIAL_PROFILE,
   INITIAL_PERMISSIONS,
-  INITIAL_BRANCHES
+  INITIAL_BRANCHES,
+  INITIAL_DAMAGED_GOODS,
+  INITIAL_PROCUREMENTS,
+  INITIAL_CAMPAIGNS,
+  INITIAL_VOUCHERS
 } from './data/mockData';
 import { 
   MenuModuleConfig, 
   SubMenuItemConfig, 
   ServiceQueue, 
+  ServiceItem,
   Sparepart, 
   Transaction, 
   ServiceStatus, 
@@ -28,7 +33,12 @@ import {
   WorkshopProfile,
   RolePermissionConfig,
   BranchItem,
-  UserSession
+  UserSession,
+  DamagedGood,
+  ProcurementRecord,
+  MarketingCampaign,
+  PromoVoucher,
+  ExpenseItem
 } from './types';
 import { AndroidFrame } from './components/common/AndroidFrame';
 import { BottomNavBar } from './components/common/BottomNavBar';
@@ -74,6 +84,34 @@ export default function App() {
   const [notifications, setNotifications] = useState<NotificationItem[]>(() => {
     const saved = localStorage.getItem('bq_notifs');
     return saved ? JSON.parse(saved) : INITIAL_NOTIFICATIONS;
+  });
+
+  const [damagedGoods, setDamagedGoods] = useState<DamagedGood[]>(() => {
+    const saved = localStorage.getItem('bq_damaged_goods');
+    return saved ? JSON.parse(saved) : INITIAL_DAMAGED_GOODS;
+  });
+
+  const [procurements, setProcurements] = useState<ProcurementRecord[]>(() => {
+    const saved = localStorage.getItem('bq_procurements');
+    return saved ? JSON.parse(saved) : INITIAL_PROCUREMENTS;
+  });
+
+  const [campaigns, setCampaigns] = useState<MarketingCampaign[]>(() => {
+    const saved = localStorage.getItem('bq_campaigns');
+    return saved ? JSON.parse(saved) : INITIAL_CAMPAIGNS;
+  });
+
+  const [vouchers, setVouchers] = useState<PromoVoucher[]>(() => {
+    const saved = localStorage.getItem('bq_vouchers');
+    return saved ? JSON.parse(saved) : INITIAL_VOUCHERS;
+  });
+
+  const [expenses, setExpenses] = useState<ExpenseItem[]>(() => {
+    const saved = localStorage.getItem('bq_kas_kecil');
+    return saved ? JSON.parse(saved) : [
+      { id: 'exp-1', title: 'Bensin Pertalite Tes Motor Tarikan', category: 'BBM / Transport', amount: 25000, date: 'Hari Ini', notes: 'Tes motor KLX BQ-05' },
+      { id: 'exp-2', title: 'Beli Air Mineral Galon & Gelas Kasir', category: 'Konsumsi', amount: 22000, date: 'Hari Ini', notes: 'Konsumsi bengkel' }
+    ];
   });
 
   const [profile, setProfile] = useState<WorkshopProfile>(() => {
@@ -128,6 +166,26 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem('bq_notifs', JSON.stringify(notifications));
   }, [notifications]);
+
+  useEffect(() => {
+    localStorage.setItem('bq_damaged_goods', JSON.stringify(damagedGoods));
+  }, [damagedGoods]);
+
+  useEffect(() => {
+    localStorage.setItem('bq_procurements', JSON.stringify(procurements));
+  }, [procurements]);
+
+  useEffect(() => {
+    localStorage.setItem('bq_campaigns', JSON.stringify(campaigns));
+  }, [campaigns]);
+
+  useEffect(() => {
+    localStorage.setItem('bq_vouchers', JSON.stringify(vouchers));
+  }, [vouchers]);
+
+  useEffect(() => {
+    localStorage.setItem('bq_kas_kecil', JSON.stringify(expenses));
+  }, [expenses]);
 
   useEffect(() => {
     localStorage.setItem('bq_profile', JSON.stringify(profile));
@@ -234,6 +292,16 @@ export default function App() {
     );
   };
 
+  const handleUpdateQueueItems = (queueId: string, items: ServiceItem[], totalCost: number) => {
+    setQueues((prev) =>
+      prev.map((q) => (q.id === queueId ? { ...q, items, totalCost } : q))
+    );
+  };
+
+  const handleResetDailyQueues = () => {
+    setQueues([]);
+  };
+
   const handlePayQueueAtPOS = (queue: ServiceQueue) => {
     setPreselectedQueueForPOS(queue);
     // Switch directly to POS feature
@@ -273,6 +341,137 @@ export default function App() {
       id: `p-${Date.now()}`
     };
     setSpareparts([newPart, ...spareparts]);
+  };
+
+  // Inbound arrival: syncs existing or adds new, logs procurement
+  const handleSaveInboundStock = (
+    itemData: {
+      code: string;
+      name: string;
+      category: Sparepart['category'];
+      brand: string;
+      stockToAdd: number;
+      minStock: number;
+      buyPrice: number;
+      sellPrice: number;
+      unit: string;
+      rackLocation: string;
+      supplier?: string;
+      poNumber?: string;
+      notes?: string;
+    }
+  ) => {
+    const existingIndex = spareparts.findIndex(
+      (p) => p.code.trim().toLowerCase() === itemData.code.trim().toLowerCase()
+    );
+
+    let resolvedPartName = itemData.name;
+    let resolvedCategory = itemData.category;
+    let isRestock = false;
+
+    if (existingIndex >= 0) {
+      isRestock = true;
+      const current = spareparts[existingIndex];
+      resolvedPartName = current.name;
+      resolvedCategory = current.category;
+      const updatedList = [...spareparts];
+      updatedList[existingIndex] = {
+        ...current,
+        name: itemData.name || current.name,
+        category: itemData.category || current.category,
+        brand: itemData.brand || current.brand,
+        stock: current.stock + itemData.stockToAdd,
+        minStock: itemData.minStock || current.minStock,
+        buyPrice: itemData.buyPrice || current.buyPrice,
+        sellPrice: itemData.sellPrice || current.sellPrice,
+        unit: itemData.unit || current.unit,
+        rackLocation: itemData.rackLocation || current.rackLocation,
+        supplier: itemData.supplier || current.supplier
+      };
+      setSpareparts(updatedList);
+    } else {
+      const newPart: Sparepart = {
+        id: `p-${Date.now()}`,
+        code: itemData.code,
+        name: itemData.name,
+        category: itemData.category,
+        brand: itemData.brand,
+        stock: itemData.stockToAdd,
+        minStock: itemData.minStock,
+        buyPrice: itemData.buyPrice,
+        sellPrice: itemData.sellPrice,
+        unit: itemData.unit,
+        rackLocation: itemData.rackLocation,
+        supplier: itemData.supplier
+      };
+      setSpareparts([newPart, ...spareparts]);
+    }
+
+    // Automatically record procurement log
+    const now = new Date();
+    const dateFormatted = `${now.toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' })}, ${now.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })} WIB`;
+    const newPO: ProcurementRecord = {
+      id: `po-${Date.now()}`,
+      poNumber: itemData.poNumber || `INB-${now.getFullYear()}${(now.getMonth() + 1).toString().padStart(2, '0')}${now.getDate().toString().padStart(2, '0')}-${Date.now().toString().slice(-4)}`,
+      code: itemData.code,
+      name: resolvedPartName,
+      category: resolvedCategory,
+      supplier: itemData.supplier || 'Distributor Resmi Bengkel',
+      qty: itemData.stockToAdd,
+      unit: itemData.unit || 'Pcs',
+      buyPrice: itemData.buyPrice,
+      totalCost: itemData.buyPrice * itemData.stockToAdd,
+      date: dateFormatted,
+      timestamp: Date.now(),
+      receiver: userSession?.name || 'Admin Logistik Bengkel',
+      type: isRestock ? 'Restock' : 'Baru',
+      notes: itemData.notes || (isRestock ? 'Penambahan stok inbound' : 'Suku cadang baru katalog')
+    };
+    setProcurements([newPO, ...procurements]);
+  };
+
+  // Damaged goods reporting: automatically reduces stock from master catalog
+  const handleReportDamagedGood = (
+    report: {
+      sparepartId?: string;
+      code: string;
+      name: string;
+      qty: number;
+      unit: string;
+      damageReason: string;
+      reportedBy: string;
+      notes?: string;
+    }
+  ) => {
+    const now = new Date();
+    const dateFormatted = `${now.toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' })}, ${now.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })} WIB`;
+    const newDamage: DamagedGood = {
+      id: `dmg-${Date.now()}`,
+      sparepartId: report.sparepartId,
+      code: report.code,
+      name: report.name,
+      qty: report.qty,
+      unit: report.unit,
+      damageReason: report.damageReason,
+      reportedBy: report.reportedBy || userSession?.name || 'Mekanik / Tim Bengkel',
+      date: dateFormatted,
+      timestamp: Date.now(),
+      status: 'Diajukan',
+      notes: report.notes
+    };
+    setDamagedGoods([newDamage, ...damagedGoods]);
+
+    // Automatically reduce master catalog stock
+    if (report.code) {
+      setSpareparts((prev) =>
+        prev.map((p) => {
+          if (p.code.toLowerCase() === report.code.toLowerCase() || p.id === report.sparepartId) {
+            return { ...p, stock: Math.max(0, p.stock - report.qty) };
+          }
+          return p;
+        })
+      );
+    }
   };
 
   // Quick search from dashboard
@@ -364,17 +563,22 @@ export default function App() {
         case 'servis':
           return (
             <ServiceDetailView
-              initialTab={selectedSubMenu?.id || 'antrian'}
+              initialTab={selectedSubMenu?.id || 'registrasi'}
               queues={queues}
               onBack={handleBack}
-              onOpenNewQueue={() => setIsNewQueueModalOpen(true)}
+              onAddQueue={handleAddQueue}
               onUpdateQueueStatus={handleUpdateQueueStatus}
+              onUpdateQueueItems={handleUpdateQueueItems}
               onSelectQueueForInvoice={handlePayQueueAtPOS}
+              onResetDailyQueues={handleResetDailyQueues}
+              spareparts={spareparts}
+              mechanics={INITIAL_MECHANICS}
             />
           );
         case 'kasir':
           return (
             <CashierPOSView
+              initialTab={selectedSubMenu?.id || 'kasir'}
               onBack={handleBack}
               spareparts={spareparts}
               transactions={transactions}
@@ -382,34 +586,61 @@ export default function App() {
               onCompleteTransaction={handleCompleteTransaction}
               onOpenReceipt={handleOpenReceipt}
               preselectedQueue={preselectedQueueForPOS}
+              onUpdateQueueStatus={handleUpdateQueueStatus}
+              onAddQueue={handleAddQueue}
             />
           );
         case 'inventaris':
           return (
             <InventoryView
-              initialTab={selectedSubMenu?.id || 'katalog-sparepart'}
+              initialTab={selectedSubMenu?.id || 'sparepart-datang'}
               spareparts={spareparts}
+              damagedGoods={damagedGoods}
+              procurements={procurements}
               onBack={handleBack}
               onUpdateStock={handleUpdateStock}
               onAddNewPart={handleAddNewPart}
+              onSaveInboundStock={handleSaveInboundStock}
+              onReportDamagedGood={handleReportDamagedGood}
             />
           );
         case 'pelanggan':
           return (
             <CustomerView
+              initialTab={selectedSubMenu?.id || 'daftar-pelanggan'}
               customers={customers}
+              queues={queues}
+              transactions={transactions}
               onBack={handleBack}
               onAddNewCustomer={(c) => setCustomers([c, ...customers])}
             />
           );
         case 'marketing':
-          return <MarketingView onBack={handleBack} />;
+          return (
+            <MarketingView
+              initialTab={selectedSubMenu?.id || 'broadcast-wa'}
+              customers={customers}
+              campaigns={campaigns}
+              vouchers={vouchers}
+              onBack={handleBack}
+              onSendCampaign={(newCmp) => setCampaigns([newCmp, ...campaigns])}
+              onAddVoucher={(newVch) => setVouchers([newVch, ...vouchers])}
+              onToggleVoucherActive={(vchId) =>
+                setVouchers((prev) =>
+                  prev.map((v) => (v.id === vchId ? { ...v, isActive: !v.isActive } : v))
+                )
+              }
+            />
+          );
         case 'laporan':
           return (
             <ReportView
-              onBack={handleBack}
+              initialTab={selectedSubMenu?.id || 'laporan-pendapatan'}
               transactions={transactions}
               mechanics={INITIAL_MECHANICS}
+              queues={queues}
+              expenses={expenses}
+              onBack={handleBack}
             />
           );
         case 'basic':

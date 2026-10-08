@@ -21,6 +21,7 @@ export interface ServiceQueue {
   status: ServiceStatus;
   complaint: string;
   timeIn: string;
+  date?: string;
   estimatedCompletion: string;
   items: ServiceItem[];
   progressPercent: number;
@@ -40,6 +41,41 @@ export interface Sparepart {
   sellPrice: number;
   unit: string; // e.g. "Botol", "Pcs", "Set"
   rackLocation: string;
+  supplier?: string;
+  barcode?: string;
+}
+
+export interface DamagedGood {
+  id: string;
+  sparepartId?: string;
+  code: string;
+  name: string;
+  qty: number;
+  unit: string;
+  damageReason: string;
+  reportedBy: string;
+  date: string;
+  timestamp: number;
+  status: 'Diajukan' | 'Disetujui SPV' | 'Dimusnahkan' | 'Retur Suplier';
+  notes?: string;
+}
+
+export interface ProcurementRecord {
+  id: string;
+  poNumber: string;
+  code: string;
+  name: string;
+  category: string;
+  supplier: string;
+  qty: number;
+  unit: string;
+  buyPrice: number;
+  totalCost: number;
+  date: string;
+  timestamp: number;
+  receiver: string;
+  type: 'Baru' | 'Restock';
+  notes?: string;
 }
 
 export interface Transaction {
@@ -75,13 +111,43 @@ export interface CustomerVehicle {
   id: string;
   name: string;
   phone: string;
+  address?: string;
   plateNumber: string;
+  vehicleBrand?: string; // e.g. "Honda", "Yamaha", "Suzuki"
+  vehicleType?: string; // e.g. "Vario 160", "BeAT eSP", "NMAX 155"
   vehicleModel: string;
   year: string;
   lastServiceDate: string;
   totalVisits: number;
   loyaltyPoints: number;
   notes: string;
+}
+
+export interface MarketingCampaign {
+  id: string;
+  title: string;
+  channel: 'WhatsApp' | 'SMS' | 'Broadcast';
+  targetAudience: string;
+  messageContent: string;
+  sentDate: string;
+  recipientCount: number;
+  status: 'Terkirim' | 'Terjadwal' | 'Draft';
+  deliveredPercent: number;
+}
+
+export interface PromoVoucher {
+  id: string;
+  code: string;
+  title: string;
+  discountType: 'Persen' | 'Nominal';
+  discountValue: number;
+  minTransaction: number;
+  validUntil: string;
+  category: 'Semua' | 'Jasa Servis' | 'Sparepart' | 'Oli';
+  quota: number;
+  usedCount: number;
+  isActive: boolean;
+  notes?: string;
 }
 
 export interface SubMenuItemConfig {
@@ -91,6 +157,39 @@ export interface SubMenuItemConfig {
   iconName: string;
   badge?: string;
   targetView: string;
+}
+
+export interface ExpenseItem {
+  id: string;
+  title: string;
+  category: 'Operasional' | 'Bahan / Perlengkapan' | 'Konsumsi' | 'BBM / Transport' | 'Lainnya';
+  amount: number;
+  date: string;
+  notes?: string;
+  recordedBy?: string;
+}
+
+export interface PettyCashConfig {
+  initialCapital: number;
+  denominations: { [key: string]: number };
+  updatedAt: string;
+}
+
+export interface ClosingRecord {
+  id: string;
+  date: string;
+  shift: string;
+  cashierName: string;
+  initialCash: number;
+  totalCashSales: number;
+  totalNonCashSales: number;
+  totalExpenses: number;
+  totalUnpaidReceivables: number;
+  expectedCashInDrawer: number;
+  actualCashInDrawer: number;
+  difference: number;
+  notes?: string;
+  status: 'Selesai' | 'Disetujui SPV';
 }
 
 export interface MenuModuleConfig {

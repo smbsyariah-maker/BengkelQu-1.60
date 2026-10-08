@@ -123,15 +123,9 @@ export const AndroidFrame: React.FC<AndroidFrameProps> = ({
             {children}
           </div>
 
-          {/* Navigasi Menu Cepat Bawah - Terproteksi Safe Area & Tetap di Posisi Terkunci */}
+          {/* Navigasi Menu Cepat Bawah - Terkunci Permanen di Bawah */}
           {bottomBar && (
-            <div
-              className={`shrink-0 w-full z-40 bg-white shadow-[0_-4px_16px_rgba(0,0,0,0.06)] border-t border-slate-200 transition-all ${
-                isSafeAreaEnabled
-                  ? 'pb-[max(env(safe-area-inset-bottom,0px),0.5rem)]'
-                  : 'pb-1'
-              }`}
-            >
+            <div className="shrink-0 w-full z-40 bg-white sticky bottom-0">
               {bottomBar}
             </div>
           )}

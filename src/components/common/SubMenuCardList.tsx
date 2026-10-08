@@ -31,8 +31,8 @@ export const SubMenuCardList: React.FC<SubMenuCardListProps> = ({
             {/* Left side: Square green icon with rounded corners & texts */}
             <div className="flex items-center gap-3.5 min-w-0 pr-2">
               {/* Square green icon with rounded corners containing white minimalist icon */}
-              <div className="w-12 h-12 rounded-xl bg-[#008952] text-white flex items-center justify-center shrink-0 shadow-sm shadow-emerald-700/20 group-hover:scale-105 transition-transform">
-                <IconRenderer name={item.iconName} className="w-6 h-6 text-white stroke-[2.2]" />
+              <div className="w-14 h-14 rounded-2xl bg-[#008952] text-white flex items-center justify-center shrink-0 shadow-md shadow-emerald-700/25 group-hover:scale-105 transition-transform">
+                <IconRenderer name={item.iconName} className="w-7 h-7 text-white stroke-[2.3]" />
               </div>
 
               {/* Bold main title & smaller descriptive subtitle underneath */}

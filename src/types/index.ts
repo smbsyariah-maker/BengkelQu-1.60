@@ -270,3 +270,31 @@ export interface SubscriptionState {
   activatedAt?: number;
 }
 
+export type DeviceSlotRole = 'Owner' | 'Supervisor' | 'Kasir' | 'Mekanik';
+
+export interface DeviceSlotInfo {
+  slotNumber: number; // 1..3 for Core, 1..9 for Enterprise
+  deviceId: string;
+  deviceName: string;
+  role: DeviceSlotRole;
+  branchId?: string;
+  branchName?: string;
+  status: 'active' | 'empty' | 'revoked';
+  isCurrentDevice: boolean;
+  lastSyncTime: string;
+}
+
+export interface DevicePairingToken {
+  workshopId: string;
+  workshopName: string;
+  licenseKey?: string;
+  tier: 'core' | 'corporate';
+  slotNumber: number;
+  role: DeviceSlotRole;
+  branchId?: string;
+  branchName?: string;
+  createdAt: number;
+  pairingCode: string; // 6 digit quick code
+}
+
+

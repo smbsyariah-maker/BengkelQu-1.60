@@ -291,10 +291,18 @@ export const MENU_MODULES: MenuModuleConfig[] = [
     title: 'Core',
     subtitle: 'Hak Akses & Role',
     iconName: 'ShieldAlert',
-    badgeCount: '2 Role',
+    badgeCount: '3 Fitur',
     badgeColor: 'bg-emerald-500',
-    description: 'Manajemen hak akses otorisasi untuk Supervisor (SPV) dan Kasir dengan matriks permission.',
+    description: 'Manajemen profil bengkel, hak akses otorisasi untuk Supervisor (SPV) dan Kasir, serta slot tautkan 3 HP.',
     subMenus: [
+      {
+        id: 'core-profile',
+        title: 'Profil Bengkel',
+        subtitle: 'Nama Bengkel, Alamat, Pemilik & Kontak',
+        iconName: 'Store',
+        badge: 'Profil',
+        targetView: 'core-profile'
+      },
       {
         id: 'core-permissions',
         title: 'Hak Akses',
@@ -302,6 +310,14 @@ export const MENU_MODULES: MenuModuleConfig[] = [
         iconName: 'Key',
         badge: 'SPV & Kasir',
         targetView: 'core-permissions'
+      },
+      {
+        id: 'core-devices',
+        title: 'Tautkan HP (3 Slot)',
+        subtitle: 'Pairing HP Kasir & Mekanik via QR',
+        iconName: 'Smartphone',
+        badge: '3 HP',
+        targetView: 'core-devices'
       }
     ]
   },
@@ -310,10 +326,26 @@ export const MENU_MODULES: MenuModuleConfig[] = [
     title: 'Corporate',
     subtitle: 'Manajemen Cabang',
     iconName: 'Building2',
-    badgeCount: '3 Cabang',
+    badgeCount: '4 Fitur',
     badgeColor: 'bg-emerald-500',
-    description: 'Pengelolaan multi-outlet bengkel dengan formulir 3 cabang terintegrasi.',
+    description: 'Pengelolaan multi-outlet bengkel lengkap dengan profil, hak akses SPV/kasir, dan slot 9 HP.',
     subMenus: [
+      {
+        id: 'corp-profile',
+        title: 'Profil Bengkel',
+        subtitle: 'Nama Bengkel, Alamat, Pemilik & Kontak',
+        iconName: 'Store',
+        badge: 'Profil',
+        targetView: 'corp-profile'
+      },
+      {
+        id: 'corp-permissions',
+        title: 'Hak Akses',
+        subtitle: '(SPV & Kasir) Role & Permission',
+        iconName: 'Key',
+        badge: 'SPV & Kasir',
+        targetView: 'corp-permissions'
+      },
       {
         id: 'corp-branches',
         title: 'Cabang',
@@ -321,6 +353,14 @@ export const MENU_MODULES: MenuModuleConfig[] = [
         iconName: 'Building2',
         badge: '3 Outlet',
         targetView: 'corp-branches'
+      },
+      {
+        id: 'corp-devices',
+        title: 'Tautkan HP (9 Slot)',
+        subtitle: 'Multi-Cabang (3 Outlet x 3 HP)',
+        iconName: 'Smartphone',
+        badge: '9 HP',
+        targetView: 'corp-devices'
       }
     ]
   },
@@ -333,6 +373,14 @@ export const MENU_MODULES: MenuModuleConfig[] = [
     badgeColor: 'bg-emerald-500',
     description: 'Pengaturan tema tampilan, pencadangan data dengan opsi kustom, pemulihan data (restore), dan reset.',
     subMenus: [
+      {
+        id: 'setting-perangkat',
+        title: 'Tautkan HP & Sinkron',
+        subtitle: 'Hubungkan HP Karyawan (QR Code)',
+        iconName: 'Smartphone',
+        badge: 'Multi-HP',
+        targetView: 'setting-perangkat'
+      },
       {
         id: 'setting-tema',
         title: 'Tema',

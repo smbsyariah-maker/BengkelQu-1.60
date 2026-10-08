@@ -9,7 +9,8 @@ import {
   Phone, 
   Mail, 
   Sparkles,
-  Check
+  Check,
+  Smartphone
 } from 'lucide-react';
 import { BranchItem } from '../../types';
 
@@ -17,12 +18,14 @@ interface CorporateBranchesViewProps {
   onBack: () => void;
   branches: BranchItem[];
   onSaveBranches: (updated: BranchItem[]) => void;
+  onNavigateToDevices?: () => void;
 }
 
 export const CorporateBranchesView: React.FC<CorporateBranchesViewProps> = ({
   onBack,
   branches,
-  onSaveBranches
+  onSaveBranches,
+  onNavigateToDevices
 }) => {
   const [branchList, setBranchList] = useState<BranchItem[]>(branches);
   const [savedIndex, setSavedIndex] = useState<number | null>(null);
@@ -85,6 +88,20 @@ export const CorporateBranchesView: React.FC<CorporateBranchesViewProps> = ({
         <p className="text-[11px] text-emerald-100 mt-2">
           Kelola data alamat, kontak, dan penanggung jawab SPV untuk masing-masing cabang bengkel.
         </p>
+
+        {onNavigateToDevices && (
+          <button
+            type="button"
+            onClick={onNavigateToDevices}
+            className="w-full mt-3 bg-white/20 hover:bg-white/30 text-white rounded-xl py-2 px-3 text-xs font-bold flex items-center justify-between transition-all cursor-pointer shadow-xs active:scale-98"
+          >
+            <span className="flex items-center gap-1.5">
+              <Smartphone className="w-3.5 h-3.5" />
+              <span>Kelola Slot HP Multi-Cabang (Maksimal 9 HP)</span>
+            </span>
+            <span className="bg-white/25 px-2 py-0.5 rounded-lg text-[10px]">Tautkan HP →</span>
+          </button>
+        )}
       </div>
 
       {globalSaved && (

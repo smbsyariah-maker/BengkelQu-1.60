@@ -9,7 +9,8 @@ import {
   Users, 
   Sparkles, 
   Save, 
-  AlertCircle 
+  AlertCircle,
+  Smartphone
 } from 'lucide-react';
 import { RolePermissionConfig } from '../../types';
 
@@ -17,12 +18,14 @@ interface CorePermissionsViewProps {
   onBack: () => void;
   permissions: RolePermissionConfig[];
   onUpdatePermissions: (updated: RolePermissionConfig[]) => void;
+  onNavigateToDevices?: () => void;
 }
 
 export const CorePermissionsView: React.FC<CorePermissionsViewProps> = ({
   onBack,
   permissions,
-  onUpdatePermissions
+  onUpdatePermissions,
+  onNavigateToDevices
 }) => {
   const [items, setItems] = useState<RolePermissionConfig[]>(permissions);
   const [selectedRoleTab, setSelectedRoleTab] = useState<'all' | 'spv' | 'kasir'>('all');
@@ -100,6 +103,20 @@ export const CorePermissionsView: React.FC<CorePermissionsViewProps> = ({
             </div>
           </div>
         </div>
+
+        {onNavigateToDevices && (
+          <button
+            type="button"
+            onClick={onNavigateToDevices}
+            className="w-full mt-3 bg-white/20 hover:bg-white/30 text-white rounded-xl py-2 px-3 text-xs font-bold flex items-center justify-between transition-all cursor-pointer shadow-xs active:scale-98"
+          >
+            <span className="flex items-center gap-1.5">
+              <Smartphone className="w-3.5 h-3.5" />
+              <span>Kelola Slot HP Karyawan (Maksimal 3 HP Core)</span>
+            </span>
+            <span className="bg-white/25 px-2 py-0.5 rounded-lg text-[10px]">Tautkan HP →</span>
+          </button>
+        )}
       </div>
 
       {savedNotice && (

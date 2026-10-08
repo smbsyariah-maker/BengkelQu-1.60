@@ -78,6 +78,7 @@ interface SettingViewProps {
   subscription?: SubscriptionState;
   onActivateSerialKey?: (serialKey: string) => { success: boolean; message: string };
   onReloadDemoData?: () => void;
+  onNavigateToDevices?: () => void;
 }
 
 export const SettingView: React.FC<SettingViewProps> = ({
@@ -101,7 +102,8 @@ export const SettingView: React.FC<SettingViewProps> = ({
   onLogout,
   subscription,
   onActivateSerialKey,
-  onReloadDemoData
+  onReloadDemoData,
+  onNavigateToDevices
 }) => {
   const [activeTab, setActiveTab] = useState<string>(initialTab);
 
@@ -438,6 +440,15 @@ export const SettingView: React.FC<SettingViewProps> = ({
           >
             Update App
           </button>
+          {onNavigateToDevices && (
+            <button
+              type="button"
+              onClick={onNavigateToDevices}
+              className="flex-1 min-w-[85px] py-1.5 px-2 rounded-lg font-bold transition-all text-center cursor-pointer whitespace-nowrap text-emerald-100 hover:text-white bg-white/15 hover:bg-white/25 active:scale-95"
+            >
+              Tautkan HP
+            </button>
+          )}
         </div>
       </div>
 

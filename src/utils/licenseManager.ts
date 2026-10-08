@@ -1,6 +1,6 @@
 // License, Device ID, and App Migration Manager for Bengkel Qu
 
-import { ProDurationOption, ProTierOption } from '../types';
+import { ProDurationOption, ProTierOption, DeviceSlotInfo, DeviceSlotRole, DevicePairingToken, SubscriptionPlanId } from '../types';
 
 export const APP_VERSION = '2.4.0';
 export const DEVELOPER_EMAIL = 'bageurhendri@gmail.com';
@@ -326,3 +326,189 @@ export function checkAndMigrateAppData(): {
     isUpdated
   };
 }
+
+/**
+ * Mendapatkan atau membuat Workshop ID unik untuk akun bengkel
+ */
+export function getOrCreateWorkshopId(): string {
+  const existing = localStorage.getItem('bq_workshop_id');
+  if (existing && existing.trim().length > 0) return existing.trim();
+
+  const deviceId = getOrCreateDeviceId();
+  const clean = deviceId.replace(/[^A-Z0-9]/g, '');
+  const id = `WS-BENGKEL-${clean.slice(-4) || '8821'}`;
+  localStorage.setItem('bq_workshop_id', id);
+  return id;
+}
+
+/**
+ * Mendapatkan batas maksimal slot HP berdasarkan paket aktif
+ * Basic / Free / Trial: 1 HP (Solo Mode Lokal)
+ * Core Pro: 3 HP
+ * Enterprise Pro: 9 HP (Multi-Cabang)
+ */
+export function getMaxSlotsForPlan(planId: SubscriptionPlanId): number {
+  if (planId === 'corporate') return 9;
+  if (planId === 'core') return 3;
+  return 1;
+}
+
+/**
+ * Memuat daftar slot HP yang terdaftar untuk bengkel ini.
+ */
+export function loadDeviceSlots(
+  planId: SubscriptionPlanId,
+  currentDeviceId: string,
+  workshopName: string = 'Bengkel Qu'
+): DeviceSlotInfo[] {
+  const maxSlots = getMaxSlotsForPlan(planId);
+  const raw = localStorage.getItem('bq_device_slots');
+  let slots: DeviceSlotInfo[] = [];
+
+  if (raw) {
+    try {
+      slots = JSON.parse(raw);
+    } catch (e) {
+      slots = [];
+    }
+  }
+
+  // Jika slot kosong, inisialisasi default
+  if (!slots || slots.length === 0) {
+    slots = [
+      {
+        slotNumber: 1,
+        deviceId: currentDeviceId,
+        deviceName: `HP Master (${workshopName})`,
+        role: 'Owner',
+        branchId: 'CABANG-PUSAT',
+        branchName: 'Cabang Utama',
+        status: 'active',
+        isCurrentDevice: true,
+        lastSyncTime: 'Baru saja'
+      }
+    ];
+
+    // Jika Core, buat slot 2 & 3 sebagai pending/empty
+    if (maxSlots >= 3) {
+      slots.push({
+        slotNumber: 2,
+        deviceId: '',
+        deviceName: 'HP Kasir POS',
+        role: 'Kasir',
+        branchId: 'CABANG-PUSAT',
+        branchName: 'Cabang Utama',
+        status: 'empty',
+        isCurrentDevice: false,
+        lastSyncTime: 'Belum Terhubung'
+      });
+      slots.push({
+        slotNumber: 3,
+        deviceId: '',
+        deviceName: 'HP Mekanik Front Desk',
+        role: 'Mekanik',
+        branchId: 'CABANG-PUSAT',
+        branchName: 'Cabang Utama',
+        status: 'empty',
+        isCurrentDevice: false,
+        lastSyncTime: 'Belum Terhubung'
+      });
+    }
+
+    // Jika Enterprise (9 slots, 3 cabang)
+    if (maxSlots >= 9) {
+      const branches = [
+        { id: 'CABANG-PUSAT', name: 'Cabang Utama' },
+        { id: 'CABANG-TIMUR', name: 'Cabang Timur' },
+        { id: 'CABANG-BARAT', name: 'Cabang Barat' }
+      ];
+
+      slots = [];
+      let counter = 1;
+      for (const br of branches) {
+        slots.push({
+          slotNumber: counter++,
+          deviceId: counter === 2 ? currentDeviceId : '',
+          deviceName: `HP SPV (${br.name})`,
+          role: counter === 2 ? 'Owner' : 'Supervisor',
+          branchId: br.id,
+          branchName: br.name,
+          status: counter === 2 ? 'active' : 'empty',
+          isCurrentDevice: counter === 2,
+          lastSyncTime: counter === 2 ? 'Baru saja' : 'Belum Terhubung'
+        });
+        slots.push({
+          slotNumber: counter++,
+          deviceId: '',
+          deviceName: `HP Kasir (${br.name})`,
+          role: 'Kasir',
+          branchId: br.id,
+          branchName: br.name,
+          status: 'empty',
+          isCurrentDevice: false,
+          lastSyncTime: 'Belum Terhubung'
+        });
+        slots.push({
+          slotNumber: counter++,
+          deviceId: '',
+          deviceName: `HP Mekanik (${br.name})`,
+          role: 'Mekanik',
+          branchId: br.id,
+          branchName: br.name,
+          status: 'empty',
+          isCurrentDevice: false,
+          lastSyncTime: 'Belum Terhubung'
+        });
+      }
+    }
+
+    localStorage.setItem('bq_device_slots', JSON.stringify(slots));
+  }
+
+  // Tandai perangkat saat ini
+  return slots.slice(0, maxSlots).map((s) => ({
+    ...s,
+    isCurrentDevice: s.deviceId === currentDeviceId
+  }));
+}
+
+/**
+ * Menyimpan daftar slot HP ke penyimpanan lokal
+ */
+export function saveDeviceSlots(slots: DeviceSlotInfo[]): void {
+  localStorage.setItem('bq_device_slots', JSON.stringify(slots));
+}
+
+/**
+ * Membuat Token Pairing untuk HP Karyawan (Format JSON & 6-Digit Code)
+ */
+export function createPairingPayload(
+  workshopId: string,
+  workshopName: string,
+  planId: 'core' | 'corporate',
+  slotNumber: number,
+  role: DeviceSlotRole,
+  branchId?: string,
+  branchName?: string
+): { jsonString: string; quickCode: string } {
+  const seed = `${workshopId}-${slotNumber}-${Date.now()}`;
+  const quickCode = hashString(seed).slice(0, 6);
+
+  const payload: DevicePairingToken = {
+    workshopId,
+    workshopName,
+    tier: planId,
+    slotNumber,
+    role,
+    branchId: branchId || 'CABANG-PUSAT',
+    branchName: branchName || 'Cabang Utama',
+    createdAt: Date.now(),
+    pairingCode: quickCode
+  };
+
+  return {
+    jsonString: JSON.stringify(payload),
+    quickCode
+  };
+}
+

@@ -62,6 +62,7 @@ import { ReportView } from './components/views/ReportView';
 import { BasicProfileView } from './components/views/BasicProfileView';
 import { CorePermissionsView } from './components/views/CorePermissionsView';
 import { CorporateBranchesView } from './components/views/CorporateBranchesView';
+import { DeviceSyncView } from './components/views/DeviceSyncView';
 import { SettingView } from './components/views/SettingView';
 import { LoginScreen } from './components/auth/LoginScreen';
 import { NewQueueModal } from './components/modals/NewQueueModal';
@@ -881,22 +882,109 @@ export default function App() {
             />
           );
         case 'core':
+          if (selectedSubMenu?.id === 'core-profile') {
+            return (
+              <BasicProfileView
+                onBack={handleBack}
+                profile={profile}
+                onSaveProfile={(updated) => setProfile(updated)}
+              />
+            );
+          }
+          if (selectedSubMenu?.id === 'core-devices') {
+            return (
+              <DeviceSyncView
+                onBack={handleBack}
+                subscription={subscription}
+                workshopProfile={profile}
+                onOpenSubscription={() => setIsSubscriptionModalOpen(true)}
+              />
+            );
+          }
           return (
             <CorePermissionsView
               onBack={handleBack}
               permissions={permissions}
               onUpdatePermissions={(updated) => setPermissions(updated)}
+              onNavigateToDevices={() => {
+                setSelectedSubMenu({
+                  id: 'core-devices',
+                  title: 'Tautkan HP (3 Slot)',
+                  subtitle: 'Pairing HP Kasir & Mekanik via QR',
+                  iconName: 'Smartphone',
+                  badge: '3 HP',
+                  targetView: 'core-devices'
+                });
+              }}
             />
           );
         case 'corporate':
+          if (selectedSubMenu?.id === 'corp-profile') {
+            return (
+              <BasicProfileView
+                onBack={handleBack}
+                profile={profile}
+                onSaveProfile={(updated) => setProfile(updated)}
+              />
+            );
+          }
+          if (selectedSubMenu?.id === 'corp-permissions') {
+            return (
+              <CorePermissionsView
+                onBack={handleBack}
+                permissions={permissions}
+                onUpdatePermissions={(updated) => setPermissions(updated)}
+                onNavigateToDevices={() => {
+                  setSelectedSubMenu({
+                    id: 'corp-devices',
+                    title: 'Tautkan HP (9 Slot)',
+                    subtitle: 'Multi-Cabang (3 Outlet x 3 HP)',
+                    iconName: 'Smartphone',
+                    badge: '9 HP',
+                    targetView: 'corp-devices'
+                  });
+                }}
+              />
+            );
+          }
+          if (selectedSubMenu?.id === 'corp-devices') {
+            return (
+              <DeviceSyncView
+                onBack={handleBack}
+                subscription={subscription}
+                workshopProfile={profile}
+                onOpenSubscription={() => setIsSubscriptionModalOpen(true)}
+              />
+            );
+          }
           return (
             <CorporateBranchesView
               onBack={handleBack}
               branches={branches}
               onSaveBranches={(updated) => setBranches(updated)}
+              onNavigateToDevices={() => {
+                setSelectedSubMenu({
+                  id: 'corp-devices',
+                  title: 'Tautkan HP (9 Slot)',
+                  subtitle: 'Multi-Cabang (3 Outlet x 3 HP)',
+                  iconName: 'Smartphone',
+                  badge: '9 HP',
+                  targetView: 'corp-devices'
+                });
+              }}
             />
           );
         case 'setting':
+          if (selectedSubMenu?.id === 'setting-perangkat') {
+            return (
+              <DeviceSyncView
+                onBack={handleBack}
+                subscription={subscription}
+                workshopProfile={profile}
+                onOpenSubscription={() => setIsSubscriptionModalOpen(true)}
+              />
+            );
+          }
           return (
             <SettingView
               initialTab={selectedSubMenu?.id || 'setting-tema'}
@@ -920,6 +1008,16 @@ export default function App() {
               subscription={subscription}
               onActivateSerialKey={handleActivateSerialKey}
               onReloadDemoData={() => handleResetData('factory')}
+              onNavigateToDevices={() => {
+                setSelectedSubMenu({
+                  id: 'setting-perangkat',
+                  title: 'Tautkan HP & Sinkron',
+                  subtitle: 'Hubungkan HP Karyawan (QR Code)',
+                  iconName: 'Smartphone',
+                  badge: 'Multi-HP',
+                  targetView: 'setting-perangkat'
+                });
+              }}
             />
           );
         default:
